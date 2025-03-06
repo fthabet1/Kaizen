@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary-color: #0ea5e9;
+  --secondary-color: #10b981;
+  --background-light: #f9fafb;
+  --background-dark: #111827;
+}
+
+/* Basic styles */
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  height: 100%;
+}
+
+body {
+  color: #111827;
+  background: var(--background-light);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.dark body {
+    background-color: #121212;
+    color: #f9fafb;
+  }
+
+/* You can add more custom styles AFTER Tailwind processes correctly */
