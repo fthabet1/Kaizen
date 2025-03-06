@@ -1,3 +1,5 @@
+'use client';
+
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -10,6 +12,7 @@ import {
     updateProfile
 } from 'firebase/auth';
 import axios from 'axios';
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 
 // Firebase configuration (should be in .env file)
 const firebaseConfig = {
@@ -32,6 +35,7 @@ interface AuthContextType {
     token: string | null;
     signInWithEmail: (email: string, password: string) => Promise<void>;
     signUpWithEmail: (email: string, password: string, name: string) => Promise<void>;
+    signInWithGoogle: () => Promise<void>;  
     logout: () => Promise<void>;
 }
 
@@ -118,6 +122,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     };
 
+    // Sign in with Google (Firebase)
+    const signInWithGoogle = async () => {
+        const provider = new GoogleAuthProvider();
+
+        try {
+            setAuthError(null);
+            setLoading(true);
+            await signInWithPopup(firebaseAuth, provider);
+        } catch (error: unknown) {
+            setAuthError((error as Error).message);
+            throw error;
+        } finally {
+            setLoading(false);
+        }
+    }
+
     // Logout from Firebase
     const logout = async () => {
         try {
@@ -136,6 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         token,
         signInWithEmail,
         signUpWithEmail,
+        signInWithGoogle,
         logout
     };
 

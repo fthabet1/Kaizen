@@ -21,6 +21,7 @@ interface Task {
   is_completed: boolean;
 }
 
+
 export default function TimerPage() {
   const { user, loading } = useAuth();
   const { isRunning, currentTask, startTimer, stopTimer } = useTimer();

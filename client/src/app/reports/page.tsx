@@ -17,6 +17,14 @@ import {
   startOfYear, endOfYear
 } from 'date-fns';
 
+// PrimeReact imports
+import { Card } from 'primereact/card';
+import { Dropdown } from 'primereact/dropdown';
+import { Calendar } from 'primereact/calendar';
+import { DataTable } from 'primereact/datatable';
+import { Column } from 'primereact/column';
+import { ProgressSpinner } from 'primereact/progressspinner';
+
 interface UserStats {
   totalTrackedTime: number;
   projectStats: ProjectStats[];
@@ -59,6 +67,11 @@ interface TimeEntry {
   description: string | null;
 }
 
+interface DateRangeOption {
+  label: string;
+  value: string;
+}
+
 export default function ReportsPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
@@ -67,9 +80,21 @@ export default function ReportsPage() {
   const [loadingData, setLoadingData] = useState(true);
   const [dateRange, setDateRange] = useState<string>('week');
   const [customDateRange, setCustomDateRange] = useState({
-    startDate: format(subWeeks(new Date(), 1), 'yyyy-MM-dd'),
-    endDate: format(new Date(), 'yyyy-MM-dd'),
+    startDate: new Date(subWeeks(new Date(), 1)),
+    endDate: new Date(),
   });
+
+  const dateRangeOptions: DateRangeOption[] = [
+    { label: 'Today', value: 'today' },
+    { label: 'Yesterday', value: 'yesterday' },
+    { label: 'This Week', value: 'week' },
+    { label: 'This Month', value: 'month' },
+    { label: 'Last Week', value: 'last_week' },
+    { label: 'Last Month', value: 'last_month' },
+    { label: 'This Year', value: 'year' },
+    { label: 'All Time', value: 'all_time' },
+    { label: 'Custom Range', value: 'custom' }
+  ];
 
   // Redirect if not logged in
   useEffect(() => {
@@ -129,8 +154,8 @@ export default function ReportsPage() {
           startDate = new Date(0); // Beginning of time
           break;
         case 'custom':
-          startDate = new Date(customDateRange.startDate);
-          endDate = new Date(customDateRange.endDate);
+          startDate = customDateRange.startDate;
+          endDate = customDateRange.endDate;
           endDate.setHours(23, 59, 59, 999);
           break;
         default:
@@ -189,415 +214,336 @@ export default function ReportsPage() {
       case 'all_time':
         return 'All Time';
       case 'custom':
-        return `${format(new Date(customDateRange.startDate), 'MMM d, yyyy')} to ${format(
-          new Date(customDateRange.endDate),
-          'MMM d, yyyy'
+        return `${format(customDateRange.startDate, 'MMM d, yyyy')} to ${format(
+          customDateRange.endDate, 'MMM d, yyyy'
         )}`;
       default:
         return 'This Week';
     }
   };
 
+  // DataTable templates for project table
+  const projectColorTemplate = (rowData: ProjectStats) => {
+    return (
+      <div className="flex align-items-center">
+        <div className="flex-shrink-0 border-circle mr-2" style={{ backgroundColor: rowData.color, width: '1rem', height: '1rem' }}></div>
+        <span>{rowData.name}</span>
+      </div>
+    );
+  };
+
+  const percentageTemplate = (rowData: ProjectStats) => {
+    return (
+      <div className="flex align-items-center">
+        <div className="w-full bg-gray-200 border-round h-8px mr-2">
+          <div className="h-8px border-round" style={{ width: `${rowData.percentage}%`, backgroundColor: rowData.color }}></div>
+        </div>
+        <span>{rowData.percentage.toFixed(1)}%</span>
+      </div>
+    );
+  };
+
+  // DataTable templates for time entries table
+  const taskTemplate = (rowData: TimeEntry) => {
+    return (
+      <div>
+        <div className="font-medium">{rowData.task_name}</div>
+        {rowData.description && <div className="text-sm text-color-secondary mt-1">{rowData.description}</div>}
+      </div>
+    );
+  };
+
+  const projectTemplate = (rowData: TimeEntry) => {
+    return (
+      <div className="flex align-items-center">
+        <div className="flex-shrink-0 border-circle mr-2" style={{ backgroundColor: rowData.project_color, width: '0.75rem', height: '0.75rem' }}></div>
+        <span>{rowData.project_name}</span>
+      </div>
+    );
+  };
+
+  const dateTemplate = (rowData: TimeEntry) => {
+    return format(parseISO(rowData.start_time), 'MMM d, yyyy');
+  };
+
+  const timeTemplate = (rowData: TimeEntry) => {
+    return `${format(parseISO(rowData.start_time), 'h:mm a')} - ${rowData.end_time ? format(parseISO(rowData.end_time), 'h:mm a') : 'In Progress'}`;
+  };
+
+  const durationTemplate = (rowData: TimeEntry) => {
+    return formatTime(rowData.duration);
+  };
+
   if (loading || loadingData) {
     return (
-      <div className="flex justify-center items-center h-96">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      <div className="flex justify-content-center align-items-center min-h-screen">
+        <ProgressSpinner style={{ width: '50px', height: '50px' }} />
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 space-y-4 md:space-y-0">
-        <h1 className="text-2xl font-bold">Reports</h1>
+    <div className="p-4">
+      <div className="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center mb-4 gap-3">
+        <h1 className="text-2xl font-bold m-0">Reports</h1>
         
-        <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
-          <select
+        <div className="flex flex-column sm:flex-row gap-2">
+          <Dropdown
             value={dateRange}
-            onChange={(e) => setDateRange(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="today">Today</option>
-            <option value="yesterday">Yesterday</option>
-            <option value="week">This Week</option>
-            <option value="month">This Month</option>
-            <option value="last_week">Last Week</option>
-            <option value="last_month">Last Month</option>
-            <option value="year">This Year</option>
-            <option value="all_time">All Time</option>
-            <option value="custom">Custom Range</option>
-          </select>
+            options={dateRangeOptions}
+            onChange={(e) => setDateRange(e.value)}
+            placeholder="Select Date Range"
+            className="w-full sm:w-12rem"
+          />
           
           {dateRange === 'custom' && (
-            <div className="flex space-x-2">
-              <input
-                type="date"
+            <div className="flex gap-2 align-items-center">
+              <Calendar
                 value={customDateRange.startDate}
-                onChange={(e) =>
-                  setCustomDateRange({
-                    ...customDateRange,
-                    startDate: e.target.value,
-                  })
-                }
-                className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                onChange={(e) => setCustomDateRange({ ...customDateRange, startDate: e.value as Date })}
+                showIcon
+                dateFormat="MM/dd/yy"
+                className="w-full"
               />
-              <span className="self-center">to</span>
-              <input
-                type="date"
+              <span className="text-color-secondary font-medium">to</span>
+              <Calendar
                 value={customDateRange.endDate}
-                onChange={(e) =>
-                  setCustomDateRange({
-                    ...customDateRange,
-                    endDate: e.target.value,
-                  })
-                }
-                className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                onChange={(e) => setCustomDateRange({ ...customDateRange, endDate: e.value as Date })}
+                showIcon
+                dateFormat="MM/dd/yy"
+                className="w-full"
               />
             </div>
           )}
         </div>
       </div>
 
-      <div className="bg-white p-4 rounded-lg shadow-md mb-6">
-        <div className="text-gray-500 mb-1">Report for</div>
-        <div className="text-xl font-semibold">{getDateRangeText()}</div>
-      </div>
+      <Card className="mb-4">
+        <div className="text-color-secondary mb-1">Report for</div>
+        <div className="text-xl font-medium">{getDateRangeText()}</div>
+      </Card>
 
       {/* Overview Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <div className="text-gray-500 mb-2">Total Time Tracked</div>
-          <div className="text-3xl font-bold">
-            {stats ? formatTime(stats.totalTrackedTime) : '0h 0m'}
-          </div>
-          <div className="text-sm text-gray-500 mt-1">{getDateRangeText()}</div>
+      <div className="grid mb-4">
+        <div className="col-12 md:col-4">
+          <Card className="h-full">
+            <div className="text-color-secondary mb-2">Total Time Tracked</div>
+            <div className="text-3xl font-bold">
+              {stats ? formatTime(stats.totalTrackedTime) : '0h 0m'}
+            </div>
+            <div className="text-sm text-color-secondary mt-1">{getDateRangeText()}</div>
+          </Card>
         </div>
         
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <div className="text-gray-500 mb-2">Daily Average</div>
-          <div className="text-3xl font-bold">
-            {stats && stats.dailyStats && stats.dailyStats.length > 0
-              ? formatTime(
-                  stats.totalTrackedTime / stats.dailyStats.length
-                )
-              : '0h 0m'}
-          </div>
-          <div className="text-sm text-gray-500 mt-1">Per day</div>
+        <div className="col-12 md:col-4">
+          <Card className="h-full">
+            <div className="text-color-secondary mb-2">Daily Average</div>
+            <div className="text-3xl font-bold">
+              {stats && stats.dailyStats && stats.dailyStats.length > 0
+                ? formatTime(
+                    stats.totalTrackedTime / stats.dailyStats.length
+                  )
+                : '0h 0m'}
+            </div>
+            <div className="text-sm text-color-secondary mt-1">Per day</div>
+          </Card>
         </div>
         
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <div className="text-gray-500 mb-2">Projects</div>
-          <div className="text-3xl font-bold">
-            {stats && stats.projectStats ? stats.projectStats.length : 0}
-          </div>
-          <div className="text-sm text-gray-500 mt-1">Active</div>
+        <div className="col-12 md:col-4">
+          <Card className="h-full">
+            <div className="text-color-secondary mb-2">Projects</div>
+            <div className="text-3xl font-bold">
+              {stats && stats.projectStats ? stats.projectStats.length : 0}
+            </div>
+            <div className="text-sm text-color-secondary mt-1">Active</div>
+          </Card>
         </div>
       </div>
 
       {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+      <div className="grid mb-4">
         {/* Daily Activity Chart */}
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-lg font-semibold mb-4">Daily Activity</h2>
-          <div className="h-64">
-            {stats && stats.dailyStats && stats.dailyStats.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={stats.dailyStats}
-                  margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="date" 
-                    tickFormatter={(date) => format(parseISO(date), 'MMM d')}
-                  />
-                  <YAxis 
-                    tickFormatter={(seconds) => `${Math.floor(seconds / 3600)}h`}
-                  />
-                  <Tooltip 
-                    formatter={(value: number) => [formatTime(value), 'Time']}
-                    labelFormatter={(date) => format(parseISO(date as string), 'MMMM d, yyyy')}
-                  />
-                  <Bar dataKey="totalTime" fill="#3B82F6" />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex items-center justify-center h-full text-gray-400">
-                No daily activity data available
-              </div>
-            )}
-          </div>
+        <div className="col-12 lg:col-6">
+          <Card title="Daily Activity" className="h-full">
+            <div className="h-20rem">
+              {stats && stats.dailyStats && stats.dailyStats.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={stats.dailyStats}
+                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis 
+                      dataKey="date" 
+                      tickFormatter={(date) => format(parseISO(date), 'MMM d')}
+                    />
+                    <YAxis 
+                      tickFormatter={(seconds) => `${Math.floor(seconds / 3600)}h`}
+                    />
+                    <Tooltip 
+                      formatter={(value: number) => [formatTime(value), 'Time']}
+                      labelFormatter={(date) => format(parseISO(date as string), 'MMMM d, yyyy')}
+                    />
+                    <Bar dataKey="totalTime" fill="var(--primary-color)" />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex align-items-center justify-content-center h-full text-color-secondary">
+                  No daily activity data available
+                </div>
+              )}
+            </div>
+          </Card>
         </div>
 
         {/* Project Distribution Chart */}
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-lg font-semibold mb-4">Project Distribution</h2>
-          <div className="h-64">
-            {stats && stats.projectStats && stats.projectStats.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={stats.projectStats}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    outerRadius={80}
-                    dataKey="totalTime"
-                    nameKey="name"
-                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                  >
-                    {stats.projectStats.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip 
-                    formatter={(value: number) => [formatTime(value), 'Time']}
-                  />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex items-center justify-center h-full text-gray-400">
-                No project data available
-              </div>
-            )}
-          </div>
+        <div className="col-12 lg:col-6">
+          <Card title="Project Distribution" className="h-full">
+            <div className="h-20rem">
+              {stats && stats.projectStats && stats.projectStats.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={stats.projectStats}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      outerRadius={80}
+                      dataKey="totalTime"
+                      nameKey="name"
+                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    >
+                      {stats.projectStats.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      formatter={(value: number) => [formatTime(value), 'Time']}
+                    />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex align-items-center justify-content-center h-full text-color-secondary">
+                  No project data available
+                </div>
+              )}
+            </div>
+          </Card>
         </div>
 
         {/* Weekly Trend Chart */}
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-lg font-semibold mb-4">Weekly Trend</h2>
-          <div className="h-64">
-            {stats && stats.weeklyStats && stats.weeklyStats.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart
-                  data={stats.weeklyStats}
-                  margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="weekStart" 
-                    tickFormatter={(date) => format(parseISO(date), 'MMM d')}
-                  />
-                  <YAxis 
-                    tickFormatter={(seconds) => `${Math.floor(seconds / 3600)}h`}
-                  />
-                  <Tooltip 
-                    formatter={(value: number) => [formatTime(value), 'Time']}
-                    labelFormatter={(date) => {
-                      const startDate = parseISO(date as string);
-                      const endDate = addDays(startDate, 6);
-                      return `Week of ${format(startDate, 'MMM d')} - ${format(endDate, 'MMM d')}`;
-                    }}
-                  />
-                  <Area type="monotone" dataKey="totalTime" stroke="#8884d8" fill="#8884d8" />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex items-center justify-center h-full text-gray-400">
-                No weekly data available
-              </div>
-            )}
-          </div>
+        <div className="col-12 lg:col-6">
+          <Card title="Weekly Trend" className="h-full">
+            <div className="h-20rem">
+              {stats && stats.weeklyStats && stats.weeklyStats.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart
+                    data={stats.weeklyStats}
+                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis 
+                      dataKey="weekStart" 
+                      tickFormatter={(date) => format(parseISO(date), 'MMM d')}
+                    />
+                    <YAxis 
+                      tickFormatter={(seconds) => `${Math.floor(seconds / 3600)}h`}
+                    />
+                    <Tooltip 
+                      formatter={(value: number) => [formatTime(value), 'Time']}
+                      labelFormatter={(date) => {
+                        const startDate = parseISO(date as string);
+                        const endDate = addDays(startDate, 6);
+                        return `Week of ${format(startDate, 'MMM d')} - ${format(endDate, 'MMM d')}`;
+                      }}
+                    />
+                    <Area type="monotone" dataKey="totalTime" stroke="#8884d8" fill="#8884d8" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex align-items-center justify-content-center h-full text-color-secondary">
+                  No weekly data available
+                </div>
+              )}
+            </div>
+          </Card>
         </div>
 
         {/* Monthly Trend Chart */}
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-lg font-semibold mb-4">Monthly Trend</h2>
-          <div className="h-64">
-            {stats && stats.monthlyStats && stats.monthlyStats.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart
-                  data={stats.monthlyStats}
-                  margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="month" 
-                    tickFormatter={(date) => format(parseISO(date), 'MMM yyyy')}
-                  />
-                  <YAxis 
-                    tickFormatter={(seconds) => `${Math.floor(seconds / 3600)}h`}
-                  />
-                  <Tooltip 
-                    formatter={(value: number) => [formatTime(value), 'Time']}
-                    labelFormatter={(date) => format(parseISO(date as string), 'MMMM yyyy')}
-                  />
-                  <Line type="monotone" dataKey="totalTime" stroke="#82ca9d" strokeWidth={2} dot={{ r: 4 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex items-center justify-center h-full text-gray-400">
-                No monthly data available
-              </div>
-            )}
-          </div>
+        <div className="col-12 lg:col-6">
+          <Card title="Monthly Trend" className="h-full">
+            <div className="h-20rem">
+              {stats && stats.monthlyStats && stats.monthlyStats.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart
+                    data={stats.monthlyStats}
+                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis 
+                      dataKey="month" 
+                      tickFormatter={(date) => format(parseISO(date), 'MMM yyyy')}
+                    />
+                    <YAxis 
+                      tickFormatter={(seconds) => `${Math.floor(seconds / 3600)}h`}
+                    />
+                    <Tooltip 
+                      formatter={(value: number) => [formatTime(value), 'Time']}
+                      labelFormatter={(date) => format(parseISO(date as string), 'MMMM yyyy')}
+                    />
+                    <Line type="monotone" dataKey="totalTime" stroke="#82ca9d" strokeWidth={2} dot={{ r: 4 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex align-items-center justify-content-center h-full text-color-secondary">
+                  No monthly data available
+                </div>
+              )}
+            </div>
+          </Card>
         </div>
       </div>
 
       {/* Project Breakdown Table */}
-      <div className="bg-white rounded-lg shadow-md overflow-hidden mb-8">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold">Project Breakdown</h2>
-        </div>
-        <div className="overflow-x-auto">
-          {stats && stats.projectStats && stats.projectStats.length > 0 ? (
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Project
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Time
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Percentage
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {stats.projectStats.map((project) => (
-                  <tr key={project.id}>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div
-                          className="flex-shrink-0 h-4 w-4 rounded-full"
-                          style={{ backgroundColor: project.color }}
-                        ></div>
-                        <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">
-                            {project.name}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatTime(project.totalTime)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="w-full bg-gray-200 rounded-full h-2.5">
-                          <div
-                            className="h-2.5 rounded-full"
-                            style={{
-                              width: `${project.percentage}%`,
-                              backgroundColor: project.color,
-                            }}
-                          ></div>
-                        </div>
-                        <span className="ml-2 text-sm text-gray-500">
-                          {project.percentage.toFixed(1)}%
-                        </span>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <div className="text-center py-8 px-6 text-gray-500">
-              No project data available
-            </div>
-          )}
-        </div>
-      </div>
+      <Card title="Project Breakdown" className="mb-4">
+        {stats && stats.projectStats && stats.projectStats.length > 0 ? (
+          <DataTable
+            value={stats.projectStats}
+            responsiveLayout="scroll"
+            className="p-datatable-sm"
+            emptyMessage="No project data available"
+          >
+            <Column field="name" header="Project" body={projectColorTemplate} />
+            <Column field="totalTime" header="Time" body={(rowData) => formatTime(rowData.totalTime)} />
+            <Column field="percentage" header="Percentage" body={percentageTemplate} />
+          </DataTable>
+        ) : (
+          <div className="text-center py-4 text-color-secondary">
+            No project data available
+          </div>
+        )}
+      </Card>
 
-      {/* Time Entries List */}
-      <div className="bg-white rounded-lg shadow-md overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold">Time Entries</h2>
-        </div>
-        <div className="overflow-x-auto">
-          {timeEntries.length > 0 ? (
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Task
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Project
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell"
-                  >
-                    Date
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell"
-                  >
-                    Time
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Duration
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {timeEntries.map((entry) => (
-                  <tr key={entry.id}>
-                    <td className="px-6 py-4">
-                      <div className="text-sm font-medium text-gray-900">
-                        {entry.task_name}
-                      </div>
-                      {entry.description && (
-                        <div className="text-xs text-gray-500 mt-1">
-                          {entry.description}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div
-                          className="flex-shrink-0 h-3 w-3 rounded-full"
-                          style={{ backgroundColor: entry.project_color }}
-                        ></div>
-                        <div className="ml-2 text-sm text-gray-900">
-                          {entry.project_name}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
-                      {format(parseISO(entry.start_time), 'MMM d, yyyy')}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden sm:table-cell">
-                      {format(parseISO(entry.start_time), 'h:mm a')} - {entry.end_time ? format(parseISO(entry.end_time), 'h:mm a') : 'In Progress'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      {formatTime(entry.duration)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <div className="text-center py-8 px-6 text-gray-500">
-              No time entries found for the selected period
-            </div>
-          )}
-        </div>
-      </div>
+      {/* Time Entries Table */}
+      <Card title="Time Entries">
+        <DataTable
+          value={timeEntries}
+          paginator
+          rows={10}
+          rowsPerPageOptions={[5, 10, 25]}
+          emptyMessage="No time entries found for the selected period"
+          responsiveLayout="stack"
+          breakpoint="960px"
+          className="p-datatable-sm"
+        >
+          <Column field="task_name" header="Task" body={taskTemplate} />
+          <Column field="project_name" header="Project" body={projectTemplate} />
+          <Column field="start_time" header="Date" body={dateTemplate} className="hidden md:table-cell" />
+          <Column field="time" header="Time" body={timeTemplate} className="hidden sm:table-cell" />
+          <Column field="duration" header="Duration" body={durationTemplate} />
+        </DataTable>
+      </Card>
     </div>
   );
 }

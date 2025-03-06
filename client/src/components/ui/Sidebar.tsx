@@ -152,7 +152,7 @@ const Sidebar = () => {
       <div className="py-4 px-3 h-full flex flex-col">
         <div className="flex items-center justify-between mb-8">
           {!collapsed && (
-            <div className="text-xl font-bold">Productivity Tracker</div>
+            <div className="text-xl font-bold">Kaizen</div>
           )}
           <button
             onClick={() => setCollapsed(!collapsed)}
