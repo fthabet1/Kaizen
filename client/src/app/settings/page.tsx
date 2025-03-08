@@ -5,6 +5,16 @@ import { useAuth } from '../../contexts/AuthContexts';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
 
+// PrimeReact Components
+import { Card } from 'primereact/card';
+import { InputText } from 'primereact/inputtext';
+import { Dropdown } from 'primereact/dropdown';
+import { Button } from 'primereact/button';
+import { ProgressSpinner } from 'primereact/progressspinner';
+import { Checkbox } from 'primereact/checkbox';
+import { Message } from 'primereact/message';
+import { TabView, TabPanel } from 'primereact/tabview';
+
 interface UserSettings {
   theme: string;
   hour_format: string;
@@ -13,7 +23,7 @@ interface UserSettings {
 }
 
 export default function SettingsPage() {
-  const { user, loading } = useAuth();
+  const { user, loading, logout } = useAuth();
   const router = useRouter();
   
   const [settings, setSettings] = useState<UserSettings>({
@@ -33,6 +43,7 @@ export default function SettingsPage() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState('');
   const [profileMessage, setProfileMessage] = useState('');
+  const [activeTab, setActiveTab] = useState(0);
 
   // Redirect if not logged in
   useEffect(() => {
@@ -123,196 +134,239 @@ export default function SettingsPage() {
     }
   };
 
+  // Options for dropdowns
+  const themeOptions = [
+    { label: 'Light', value: 'light' },
+    { label: 'Dark', value: 'dark' }
+  ];
+
+  const hourFormatOptions = [
+    { label: '12-hour (AM/PM)', value: '12h' },
+    { label: '24-hour', value: '24h' }
+  ];
+
+  const weekStartOptions = [
+    { label: 'Sunday', value: 0 },
+    { label: 'Monday', value: 1 }
+  ];
+
   if (loading || loadingSettings) {
     return (
-      <div className="flex justify-center items-center h-96">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      <div className="flex justify-content-center align-items-center" style={{ height: '60vh' }}>
+        <ProgressSpinner />
       </div>
     );
   }
 
+  // Profile settings tab
+  const ProfileSettings = () => (
+    <div className="p-fluid">
+      <div className="field mb-4">
+        <label htmlFor="name" className="font-medium mb-2 block">Name</label>
+        <InputText
+          id="name"
+          value={profile.name}
+          onChange={(e) => handleProfileChange('name', e.target.value)}
+        />
+      </div>
+      
+      <div className="field mb-4">
+        <label htmlFor="email" className="font-medium mb-2 block">Email</label>
+        <InputText
+          id="email"
+          value={profile.email}
+          disabled
+          className="opacity-70"
+        />
+        <small className="text-color-secondary block mt-1">
+          Email cannot be changed. It is managed by your authentication provider.
+        </small>
+      </div>
+      
+      {profileMessage && (
+        <Message 
+          severity={profileMessage.includes('Error') ? 'error' : 'success'} 
+          text={profileMessage}
+          className="w-full mb-4"
+        />
+      )}
+      
+      <Button 
+        label="Save Profile" 
+        icon="pi pi-save" 
+        onClick={saveProfile}
+        loading={savingProfile}
+      />
+    </div>
+  );
+
+  // App settings tab
+  const AppSettings = () => (
+    <div className="p-fluid">
+      <div className="field mb-4">
+        <label htmlFor="theme" className="font-medium mb-2 block">Theme</label>
+        <Dropdown
+          id="theme"
+          value={settings.theme}
+          options={themeOptions}
+          onChange={(e) => handleSettingsChange('theme', e.value)}
+          className="w-full"
+        />
+      </div>
+      
+      <div className="field mb-4">
+        <label htmlFor="hour-format" className="font-medium mb-2 block">Time Format</label>
+        <Dropdown
+          id="hour-format"
+          value={settings.hour_format}
+          options={hourFormatOptions}
+          onChange={(e) => handleSettingsChange('hour_format', e.value)}
+          className="w-full"
+        />
+      </div>
+      
+      <div className="field mb-4">
+        <label htmlFor="week-start" className="font-medium mb-2 block">Week Starts On</label>
+        <Dropdown
+          id="week-start"
+          value={settings.week_start}
+          options={weekStartOptions}
+          onChange={(e) => handleSettingsChange('week_start', e.value)}
+          className="w-full"
+        />
+      </div>
+      
+      <div className="field-checkbox mb-4">
+        <Checkbox
+          inputId="notifications"
+          checked={settings.notification_enabled}
+          onChange={(e) => handleSettingsChange('notification_enabled', e.checked!)}
+        />
+        <label htmlFor="notifications" className="ml-2">Enable notifications</label>
+      </div>
+      
+      {settingsMessage && (
+        <Message 
+          severity={settingsMessage.includes('Error') ? 'error' : 'success'} 
+          text={settingsMessage}
+          className="w-full mb-4"
+        />
+      )}
+      
+      <Button 
+        label="Save Settings" 
+        icon="pi pi-save" 
+        onClick={saveSettings}
+        loading={savingSettings}
+      />
+    </div>
+  );
+
+  // Account settings tab
+  const AccountSettings = () => (
+    <div>
+      <p className="mb-4 line-height-3">
+        Your account is managed through your authentication provider.
+        To change your password or delete your account, please visit your provider&apos;s website.
+      </p>
+      
+      <Button 
+        label="Sign Out" 
+        icon="pi pi-sign-out" 
+        className="p-button-outlined" 
+        onClick={() => logout()}
+      />
+    </div>
+  );
+
+  // Data export tab
+  const DataExport = () => (
+    <div>
+      <p className="mb-4 line-height-3">
+        You can export your time tracking data for backup or analysis.
+      </p>
+      
+      <div className="flex flex-column gap-2">
+        <Button 
+          label="Export as CSV" 
+          icon="pi pi-file" 
+          className="p-button-outlined"
+          onClick={() => alert('Feature coming soon!')}
+        />
+        
+        <Button 
+          label="Export as JSON" 
+          icon="pi pi-file" 
+          className="p-button-outlined"
+          onClick={() => alert('Feature coming soon!')}
+        />
+      </div>
+    </div>
+  );
+
+  // For mobile view, use tabview 
+  const mobileView = () => {
+    return (
+      <TabView activeIndex={activeTab} onTabChange={(e) => setActiveTab(e.index)}>
+        <TabPanel header="Profile">
+          <ProfileSettings />
+        </TabPanel>
+        <TabPanel header="App Settings">
+          <AppSettings />
+        </TabPanel>
+        <TabPanel header="Account">
+          <AccountSettings />
+        </TabPanel>
+        <TabPanel header="Data">
+          <DataExport />
+        </TabPanel>
+      </TabView>
+    );
+  };
+
+  // For desktop view, use grid layout
+  const desktopView = () => {
+    return (
+      <div className="grid">
+        <div className="col-12 md:col-6">
+          <Card title="Profile" className="h-full">
+            <ProfileSettings />
+          </Card>
+        </div>
+        
+        <div className="col-12 md:col-6">
+          <Card title="App Settings" className="h-full">
+            <AppSettings />
+          </Card>
+        </div>
+        
+        <div className="col-12 md:col-6">
+          <Card title="Account" className="h-full">
+            <AccountSettings />
+          </Card>
+        </div>
+        
+        <div className="col-12 md:col-6">
+          <Card title="Data" className="h-full">
+            <DataExport />
+          </Card>
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div className="container mx-auto">
-      <h1 className="text-2xl font-bold mb-6">Settings</h1>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Profile Settings */}
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-lg font-semibold mb-4">Profile</h2>
-          
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
-                Name
-              </label>
-              <input
-                type="text"
-                id="name"
-                value={profile.name}
-                onChange={(e) => handleProfileChange('name', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-            
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                Email
-              </label>
-              <input
-                type="email"
-                id="email"
-                value={profile.email}
-                onChange={(e) => handleProfileChange('email', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                disabled={true} // Email can't be changed in this version
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Email cannot be changed. It is managed by your authentication provider.
-              </p>
-            </div>
-            
-            {profileMessage && (
-              <div className={`text-sm ${profileMessage.includes('Error') ? 'text-red-600' : 'text-green-600'}`}>
-                {profileMessage}
-              </div>
-            )}
-            
-            <div className="pt-2">
-              <button
-                onClick={saveProfile}
-                disabled={savingProfile}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-              >
-                {savingProfile ? 'Saving...' : 'Save Profile'}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* App Settings */}
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-lg font-semibold mb-4">App Settings</h2>
-          
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="theme" className="block text-sm font-medium text-gray-700 mb-1">
-                Theme
-              </label>
-              <select
-                id="theme"
-                value={settings.theme}
-                onChange={(e) => handleSettingsChange('theme', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-              </select>
-            </div>
-            
-            <div>
-              <label htmlFor="hour-format" className="block text-sm font-medium text-gray-700 mb-1">
-                Time Format
-              </label>
-              <select
-                id="hour-format"
-                value={settings.hour_format}
-                onChange={(e) => handleSettingsChange('hour_format', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="12h">12-hour (AM/PM)</option>
-                <option value="24h">24-hour</option>
-              </select>
-            </div>
-            
-            <div>
-              <label htmlFor="week-start" className="block text-sm font-medium text-gray-700 mb-1">
-                Week Starts On
-              </label>
-              <select
-                id="week-start"
-                value={settings.week_start}
-                onChange={(e) => handleSettingsChange('week_start', parseInt(e.target.value))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value={0}>Sunday</option>
-                <option value={1}>Monday</option>
-              </select>
-            </div>
-            
-            <div className="flex items-center">
-              <input
-                id="notifications"
-                type="checkbox"
-                checked={settings.notification_enabled}
-                onChange={(e) => handleSettingsChange('notification_enabled', e.target.checked)}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-              />
-              <label htmlFor="notifications" className="ml-2 block text-sm text-gray-900">
-                Enable notifications
-              </label>
-            </div>
-            
-            {settingsMessage && (
-              <div className={`text-sm ${settingsMessage.includes('Error') ? 'text-red-600' : 'text-green-600'}`}>
-                {settingsMessage}
-              </div>
-            )}
-            
-            <div className="pt-2">
-              <button
-                onClick={saveSettings}
-                disabled={savingSettings}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-              >
-                {savingSettings ? 'Saving...' : 'Save Settings'}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Account Settings */}
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-lg font-semibold mb-4">Account</h2>
-          
-          <p className="text-gray-700 mb-4">
-            Your account is managed through your authentication provider.
-            To change your password or delete your account, please visit your provider&apos;s website.
-          </p>
-          
-          <div className="pt-2">
-            <button
-              onClick={() => router.push('/auth/login')}
-              className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              Sign Out
-            </button>
-          </div>
-        </div>
-
-        {/* Export Data */}
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-lg font-semibold mb-4">Data</h2>
-          
-          <p className="text-gray-700 mb-4">
-            You can export your time tracking data for backup or analysis.
-          </p>
-          
-          <div className="space-y-2">
-            <button
-              onClick={() => alert('Feature coming soon!')}
-              className="w-full px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              Export as CSV
-            </button>
-            
-            <button
-              onClick={() => alert('Feature coming soon!')}
-              className="w-full px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              Export as JSON
-            </button>
-          </div>
-        </div>
+    <div className="p-3 md:p-4">
+      <div className="mb-3 md:mb-4">
+        <h1 className="text-2xl font-medium m-0">Settings</h1>
+      </div>
+      
+      <div className="hidden md:block">
+        {desktopView()}
+      </div>
+      
+      <div className="block md:hidden">
+        {mobileView()}
       </div>
     </div>
   );

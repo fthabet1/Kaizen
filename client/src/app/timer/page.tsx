@@ -145,7 +145,7 @@ export default function TimerPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Project Selection */}
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
+        <div className=" rounded-lg shadow-md overflow-hidden">
           <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
             <h2 className="font-bold text-lg">Projects</h2>
           </div>
@@ -185,7 +185,7 @@ export default function TimerPage() {
         </div>
 
         {/* Task Selection */}
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
+        <div className=" rounded-lg shadow-md overflow-hidden">
           <div className="px-6 py-4 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
             <h2 className="font-bold text-lg">Tasks</h2>
             {selectedProject && (
@@ -291,7 +291,7 @@ export default function TimerPage() {
         </div>
 
         {/* Timer Controls */}
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
+        <div className=" rounded-lg shadow-md overflow-hidden">
           <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
             <h2 className="font-bold text-lg">Timer</h2>
           </div>
