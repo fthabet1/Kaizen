@@ -281,8 +281,8 @@ export default function ProjectsPage() {
           className="mt-4"
           responsiveLayout="stack"
           breakpoint="768px"
-          rowClassName="cursor-pointer"
-          onRowClick={(e) => openEdit(e.data)}
+          rowClassName={() => "cursor-pointer"}
+          onRowClick={(e) => openEdit(e.data as Project)}
         >
           <Column field="name" header="Project" body={projectNameTemplate} sortable style={{ minWidth: '14rem' }}></Column>
           <Column field="description" header="Description" sortable className="hidden md:table-cell" style={{ minWidth: '14rem' }}></Column>

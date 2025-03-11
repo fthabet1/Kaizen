@@ -86,34 +86,35 @@ export default function Login() {
             <Message severity="error" text={error} className="w-full mb-4" />
           )}
 
-          <form onSubmit={handleSubmit} className="flex flex-column align-items-center">
+            <form onSubmit={handleSubmit} className="flex flex-column align-items-center">
             <div className="mb-4 w-full flex justify-content-center">
               <div className="w-10 md:w-8">
-                <InputText 
-                  id="email" 
-                  type="email" 
-                  className="w-full" 
-                  value={email} 
-                  onChange={(e) => setEmail(e.target.value)} 
-                  placeholder="Email address"
-                  required
-                />
+              <InputText 
+                id="email" 
+                type="email" 
+                className="w-full" 
+                value={email} 
+                onChange={(e) => setEmail(e.target.value)} 
+                placeholder="Email address"
+                required
+              />
               </div>
             </div>
 
-            <div className="mb-2 w-full flex justify-content-center">
-              <div className="w-10 md:w-8">
-                <Password 
-                  id="password" 
-                  className="w-full"
-                  inputClassName="w-full"
-                  value={password} 
-                  onChange={(e) => setPassword(e.target.value)} 
-                  toggleMask 
-                  placeholder="Password"
-                  feedback={false}
-                  required
-                />
+            <div className="mb-4 w-full flex justify-content-center">
+              <div className="w-10 md:w-6">
+              <Password 
+                id="password" 
+                className="w-full"
+                inputClassName="w-full"
+                value={password} 
+                onChange={(e) => setPassword(e.target.value)} 
+                toggleMask 
+                placeholder="Password"
+                feedback={false}
+                required
+                style={{ width: '100%' }}
+              />
               </div>
             </div>
             

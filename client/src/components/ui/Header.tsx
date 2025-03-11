@@ -15,11 +15,9 @@ export default function Header() {
   const userMenuRef = useRef<Menu>(null);
   const [userMenuItems, setUserMenuItems] = useState<MenuItem[]>([]);
   
-  // State for sidebar
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
 
-  // Initialize dark mode from localStorage or system preference
   useEffect(() => {
     if (localStorage.theme === 'dark' || 
         (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
@@ -29,7 +27,6 @@ export default function Header() {
     }
   }, []);
 
-  // Setup menu items when user is available
   useEffect(() => {
     if (user) {
       setUserMenuItems([
@@ -62,6 +59,21 @@ export default function Header() {
     }
   }, [user, logout, router]);
 
+  useEffect(() => {
+    setSidebarVisible(false);
+  }, []);
+  
+  useEffect(() => {
+    const handleRouteChange = () => {
+      setSidebarVisible(false);
+    };
+    
+    window.addEventListener('popstate', handleRouteChange);
+    return () => {
+      window.removeEventListener('popstate', handleRouteChange);
+    };
+  }, []);
+
   if (!user && !loading) {
     return null;
   }
@@ -72,8 +84,14 @@ export default function Header() {
     }
   };
 
-  const toggleSidebar = () => {
-    setSidebarVisible(!sidebarVisible);
+  const openSidebar = () => {
+    console.log("Opening sidebar");
+    setSidebarVisible(true);
+  };
+
+  const closeSidebar = () => {
+    console.log("Closing sidebar");
+    setSidebarVisible(false);
   };
 
   const toggleCollapsedState = () => {
@@ -82,37 +100,47 @@ export default function Header() {
 
   return (
     <>
-      <div className={`fixed inset-0 z-10 pointer-events-none ${!user || !sidebarVisible ? 'hidden' : ''}`}>
-        <div 
-          className={`absolute inset-y-0 left-0 transition-transform duration-500 ease-in-out transform ${
-            sidebarVisible ? 'translate-x-0' : '-translate-x-full'
-          } pointer-events-auto`}
-        >
-          <Sidebar 
-            onClose={toggleSidebar}
-            collapsed={collapsed}
-            onCollapseToggle={toggleCollapsedState}
-          />
-        </div>
-        {sidebarVisible && (
+      {user && (
+        <div className="sidebar-container" style={{ zIndex: 9999 }}>
+          {sidebarVisible && (
+            <div 
+              className="fixed inset-0 bg-black bg-opacity-50"
+              onClick={closeSidebar}
+              style={{ 
+                left: collapsed ? '5rem' : '18rem',
+                zIndex: 9998
+              }}
+            ></div>
+          )}
+          
           <div 
-            className="absolute inset-0 bg-black bg-opacity-50 pointer-events-auto"
-            onClick={toggleSidebar}
-            style={{ left: collapsed ? '5rem' : '18rem' }}
-          ></div>
-        )}
-      </div>
+            className={`fixed inset-y-0 left-0 transform ${
+              sidebarVisible ? 'translate-x-0' : '-translate-x-full'
+            } transition-transform duration-300 ease-in-out`}
+            style={{ zIndex: 9999 }}
+          >
+            {sidebarVisible && (
+              <Sidebar 
+                onClose={closeSidebar}
+                collapsed={collapsed}
+                onCollapseToggle={toggleCollapsedState}
+              />
+            )}
+          </div>
+        </div>
+      )}
     
-      <div className="surface-card py-3 px-4 md:px-6 shadow-2 relative z-5">
+      {/* Header content */}
+      <div className="surface-card py-3 px-4 md:px-6 shadow-2 relative" style={{ zIndex: 10 }}>
         <div className="hidden md:flex">
           <div className="grid w-full">
             <div className="col-4 flex justify-content-start">
-              {user && !sidebarVisible && (
+              {user && (
                 <Button
                   icon="pi pi-bars"
                   className="p-button-rounded p-button-text"
-                  onClick={toggleSidebar}
-                  aria-label="Toggle sidebar"
+                  onClick={openSidebar}
+                  aria-label="Open sidebar"
                 />
               )}
             </div>
@@ -162,12 +190,12 @@ export default function Header() {
       </div>
 
       <div className="flex md:hidden justify-content-between align-items-center">
-        {user && !sidebarVisible && (
+        {user && (
           <Button
             icon="pi pi-bars"
             className="p-button-rounded p-button-text p-button-sm mr-2"
-            onClick={toggleSidebar}
-            aria-label="Toggle sidebar"
+            onClick={openSidebar}
+            aria-label="Open sidebar"
           />
         )}
         <Link href="/" className="no-underline">
