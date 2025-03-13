@@ -1,13 +1,12 @@
 import '../styles/globals.css';
 import type { Metadata } from 'next';
 import 'primereact/resources/themes/lara-dark-indigo/theme.css'; 
-import 'primereact/resources/primereact.min.css';               // core css
+import 'primereact/resources/primereact.min.css';        
 import 'primeicons/primeicons.css';                             
 import 'primeflex/primeflex.css';            
 import { ReactNode } from 'react';
 import { Providers } from './providers';
-import Header from '../components/ui/Header';
-
+import MainLayout from '../components/MainLayout';
 
 export const metadata: Metadata = {
   title: 'Kaizen | Productivity Suite',
@@ -20,10 +19,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <body>
         <Providers>
-          <div className="min-h-screen bg-gray-900 text-white flex flex-column overflow-hidden">
-            <Header />
-              {children}
-          </div>
+          <MainLayout>
+            {children}
+          </MainLayout>
         </Providers>
       </body>
     </html>

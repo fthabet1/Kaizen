@@ -6,6 +6,12 @@ import { useTimer } from '../../contexts/TimerContext';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
 
+// PrimeReact imports for better UI
+import { Card } from 'primereact/card';
+import { Button } from 'primereact/button';
+import { InputTextarea } from 'primereact/inputtextarea';
+import { ProgressSpinner } from 'primereact/progressspinner';
+
 interface Project {
   id: number;
   name: string;
@@ -20,7 +26,6 @@ interface Task {
   description?: string;
   is_completed: boolean;
 }
-
 
 export default function TimerPage() {
   const { user, loading } = useAuth();
@@ -133,268 +138,219 @@ export default function TimerPage() {
 
   if (loading || loadingData) {
     return (
-      <div className="flex justify-center items-center h-96">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      <div className="flex justify-content-center align-items-center h-screen">
+        <ProgressSpinner />
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto">
-      <h1 className="text-2xl font-bold mb-6">Time Tracker</h1>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Project Selection */}
-        <div className=" rounded-lg shadow-md overflow-hidden">
-          <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
-            <h2 className="font-bold text-lg">Projects</h2>
+    <>
+      <div className="p-4">
+        <div className="grid">
+          <div className="col-12">
+            <h1 className="text-2xl font-bold mb-4">Time Tracker</h1>
           </div>
-          <div className="p-6">
-            <div className="space-y-2">
+
+          <div className="col-12 md:col-4 mb-4">
+            <Card title="Projects" className="h-full">
               {projects.length > 0 ? (
-                projects.map((project) => (
-                  <button
-                    key={project.id}
-                    onClick={() => handleProjectSelect(project)}
-                    className={`w-full flex items-center p-3 rounded-md text-left ${
-                      selectedProject?.id === project.id
-                        ? 'bg-blue-50 border border-blue-200'
-                        : 'hover:bg-gray-50 border border-transparent'
-                    }`}
-                  >
+                <div className="overflow-y-auto" style={{ maxHeight: '400px' }}>
+                  {projects.map((project) => (
                     <div
-                      className="w-4 h-4 rounded-full mr-3 flex-shrink-0"
-                      style={{ backgroundColor: project.color }}
-                    ></div>
-                    <span className="font-medium">{project.name}</span>
-                  </button>
-                ))
+                      key={project.id}
+                      className={`p-3 mb-2 border-round cursor-pointer transition-colors transition-duration-150 ${
+                        selectedProject?.id === project.id
+                          ? 'bg-primary'
+                          : 'hover:surface-100'
+                      }`}
+                      onClick={() => handleProjectSelect(project)}
+                    >
+                      <div className="flex align-items-center">
+                        <div
+                          className="border-circle mr-2 flex-shrink-0"
+                          style={{ backgroundColor: project.color, width: '1rem', height: '1rem' }}
+                        />
+                        <span className="font-medium">{project.name}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               ) : (
-                <div className="text-center py-6 text-gray-500">
-                  <p>No projects found</p>
-                  <button
-                    className="mt-2 text-blue-600 hover:underline"
-                    onClick={() => router.push('/projects/new')}
-                  >
-                    Create your first project
-                  </button>
+                <div className="text-center py-5">
+                  <i className="pi pi-folder-open text-4xl text-gray-400 mb-3" />
+                  <div className="text-lg font-medium mb-2">No Projects</div>
+                  <p className="mb-4">Create a project to start tracking time</p>
+                  <Button
+                    label="Create Project"
+                    icon="pi pi-plus"
+                    onClick={() => router.push('/projects')}
+                    className="p-button-outlined"
+                  />
                 </div>
               )}
-            </div>
+            </Card>
           </div>
-        </div>
 
-        {/* Task Selection */}
-        <div className=" rounded-lg shadow-md overflow-hidden">
-          <div className="px-6 py-4 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
-            <h2 className="font-bold text-lg">Tasks</h2>
-            {selectedProject && (
-              <button
-                onClick={() => setShowCreateTask(true)}
-                className="text-blue-600 hover:text-blue-800"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-5 w-5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 4v16m8-8H4"
+          <div className="col-12 md:col-4 mb-4">
+            <Card 
+              title="Tasks" 
+              className="h-full"
+              subTitle={selectedProject ? selectedProject.name : 'Select a project'}
+            >
+              {selectedProject && (
+                <div className="flex justify-content-end mb-3">
+                  <Button
+                    icon="pi pi-plus"
+                    className="p-button-rounded p-button-text"
+                    onClick={() => setShowCreateTask(true)}
+                    tooltip="Add Task"
                   />
-                </svg>
-              </button>
-            )}
-          </div>
-          <div className="p-6">
-            {selectedProject ? (
-              showCreateTask ? (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Task Name
-                    </label>
-                    <input
-                      type="text"
-                      value={newTaskName}
-                      onChange={(e) => setNewTaskName(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Enter task name"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Description (optional)
-                    </label>
-                    <textarea
-                      value={newTaskDescription}
-                      onChange={(e) => setNewTaskDescription(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      rows={3}
-                      placeholder="Enter task description"
-                    ></textarea>
-                  </div>
-                  <div className="flex justify-end space-x-2">
-                    <button
-                      onClick={() => setShowCreateTask(false)}
-                      className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleCreateTask}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                    >
-                      Create Task
-                    </button>
-                  </div>
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  {filteredTasks.length > 0 ? (
-                    filteredTasks.map((task) => (
-                      <button
-                        key={task.id}
-                        onClick={() => handleTaskSelect(task)}
-                        className={`w-full flex items-center p-3 rounded-md text-left ${
-                          selectedTask?.id === task.id
-                            ? 'bg-blue-50 border border-blue-200'
-                            : 'hover:bg-gray-50 border border-transparent'
-                        }`}
-                      >
-                        <span className="font-medium">{task.name}</span>
-                      </button>
-                    ))
-                  ) : (
-                    <div className="text-center py-6 text-gray-500">
-                      <p>No tasks in this project</p>
-                      <button
-                        className="mt-2 text-blue-600 hover:underline"
-                        onClick={() => setShowCreateTask(true)}
-                      >
-                        Create your first task
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )
-            ) : (
-              <div className="text-center py-10 text-gray-500">
-                <p>Select a project first</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Timer Controls */}
-        <div className=" rounded-lg shadow-md overflow-hidden">
-          <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
-            <h2 className="font-bold text-lg">Timer</h2>
-          </div>
-          <div className="p-6">
-            {isRunning ? (
-              <div className="space-y-6">
-                <div className="text-center">
-                  <div className="text-lg font-medium">{currentTask?.name}</div>
-                  <div className="text-sm text-gray-500 mt-1">Currently tracking</div>
-                </div>
-                <button
-                  onClick={handleStopTimer}
-                  className="w-full flex items-center justify-center px-4 py-3 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-5 w-5 mr-2"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"
-                    />
-                  </svg>
-                  Stop Timer
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {selectedTask ? (
-                  <>
-                    <div>
-                      <div className="text-sm font-medium text-gray-700 mb-1">
-                        Selected Task
-                      </div>
-                      <div className="p-3 bg-gray-50 rounded-md">
-                        <div className="font-medium">{selectedTask.name}</div>
-                        {selectedTask.description && (
-                          <div className="text-sm text-gray-500 mt-1">
-                            {selectedTask.description}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Description (optional)
-                      </label>
-                      <input
-                        type="text"
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              )}
+              {selectedProject ? (
+                showCreateTask ? (
+                  <div className="p-fluid">
+                    <div className="field">
+                      <label htmlFor="task-name" className="font-medium mb-2 block">Task Name</label>
+                      <InputTextarea
+                        id="task-name"
+                        value={newTaskName}
+                        onChange={(e) => setNewTaskName(e.target.value)}
+                        rows={1}
+                        autoResize
+                        className="w-full"
                         placeholder="What are you working on?"
                       />
                     </div>
-                    <button
-                      onClick={handleStartTimer}
-                      className="w-full flex items-center justify-center px-4 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-5 w-5 mr-2"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
-                        />
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                        />
-                      </svg>
-                      Start Timer
-                    </button>
-                  </>
-                ) : (
-                  <div className="text-center py-10 text-gray-500">
-                    <p>Select a task to start tracking</p>
+                    <div className="field">
+                      <label htmlFor="task-description" className="font-medium mb-2 block">Description (optional)</label>
+                      <InputTextarea
+                        id="task-description"
+                        value={newTaskDescription}
+                        onChange={(e) => setNewTaskDescription(e.target.value)}
+                        rows={3}
+                        autoResize
+                        className="w-full"
+                      />
+                    </div>
+                    <div className="flex justify-content-end gap-2 mt-4">
+                      <Button
+                        label="Cancel"
+                        icon="pi pi-times"
+                        className="p-button-outlined p-button-secondary"
+                        onClick={() => setShowCreateTask(false)}
+                      />
+                      <Button
+                        label="Create Task"
+                        icon="pi pi-check"
+                        onClick={handleCreateTask}
+                        disabled={!newTaskName.trim()}
+                      />
+                    </div>
                   </div>
-                )}
-              </div>
-            )}
+                ) : (
+                  <div className="overflow-y-auto" style={{ maxHeight: '400px' }}>
+                    {filteredTasks.length > 0 ? (
+                      filteredTasks.map((task) => (
+                        <div
+                          key={task.id}
+                          className={`p-3 mb-2 border-round cursor-pointer transition-colors transition-duration-150 ${
+                            selectedTask?.id === task.id
+                              ? 'bg-primary'
+                              : 'hover:surface-100'
+                          }`}
+                          onClick={() => handleTaskSelect(task)}
+                        >
+                          <div className="font-medium">{task.name}</div>
+                          {task.description && (
+                            <div className="text-sm text-color-secondary mt-1">{task.description}</div>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-5 text-color-secondary">
+                        <i className="pi pi-check-square text-4xl mb-3" />
+                        <div>No tasks in this project</div>
+                        <Button
+                          label="Add Task"
+                          icon="pi pi-plus"
+                          className="p-button-text mt-3"
+                          onClick={() => setShowCreateTask(true)}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )
+              ) : (
+                <div className="text-center py-5 text-color-secondary">
+                  <i className="pi pi-arrow-left text-4xl mb-3" />
+                  <div>Select a project first</div>
+                </div>
+              )}
+            </Card>
+          </div>
+
+          <div className="col-12 md:col-4 mb-4">
+            <Card title="Timer" className="h-full">
+              {isRunning ? (
+                <div className="p-fluid">
+                  <div className="text-center mb-4">
+                    <div className="text-xl font-bold mb-2">{currentTask?.name}</div>
+                    <div className="text-color-secondary">Currently tracking</div>
+                  </div>
+                  
+                  <Button
+                    label="Stop Timer"
+                    icon="pi pi-stop-circle"
+                    className="p-button-danger w-full p-3 text-xl"
+                    onClick={handleStopTimer}
+                  />
+                </div>
+              ) : (
+                <div className="p-fluid">
+                  {selectedTask ? (
+                    <>
+                      <div className="mb-4">
+                        <div className="text-lg font-bold mb-2">Selected Task</div>
+                        <div className="p-3 bg-gray-100 dark:bg-gray-900 border-round">
+                          <div className="font-medium">{selectedTask.name}</div>
+                          {selectedTask.description && (
+                            <div className="text-sm text-color-secondary mt-1">{selectedTask.description}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="field mb-4">
+                        <label htmlFor="description" className="font-medium mb-2 block">Description (optional)</label>
+                        <InputTextarea
+                          id="description"
+                          value={description}
+                          onChange={(e) => setDescription(e.target.value)}
+                          rows={3}
+                          autoResize
+                          className="w-full"
+                          placeholder="What are you working on?"
+                        />
+                      </div>
+                      <Button
+                        label="Start Timer"
+                        icon="pi pi-play"
+                        className="p-button-success w-full p-3 text-xl"
+                        onClick={handleStartTimer}
+                      />
+                    </>
+                  ) : (
+                    <div className="text-center py-5 text-color-secondary">
+                      <i className="pi pi-arrow-left text-4xl mb-3" />
+                      <div>Select a task to start tracking</div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </Card>
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

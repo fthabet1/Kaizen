@@ -2,11 +2,14 @@
 
 import { ReactNode } from 'react';
 import { AuthProvider } from '../contexts/AuthContexts';
+import { TimerProvider } from '../contexts/TimerContext';
 
 export function Providers({ children }: { children: ReactNode }) {
   return (
     <AuthProvider>
-      {children}
+      <TimerProvider>
+        {children}
+      </TimerProvider>
     </AuthProvider>
   );
 }

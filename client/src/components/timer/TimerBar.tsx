@@ -1,7 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTimer } from '../../contexts/TimerContext';
+import { Button } from 'primereact/button';
+import { InputText } from 'primereact/inputtext';
 
 const TimerBar = () => {
   const { 
@@ -17,18 +19,30 @@ const TimerBar = () => {
 
   const [isDescriptionEditing, setIsDescriptionEditing] = useState(false);
   const [tempDescription, setTempDescription] = useState(description);
+  const [displayedTime, setDisplayedTime] = useState('00:00:00');
+
+  // Update the timer display every second
+  useEffect(() => {
+    if (isRunning) {
+      const timer = setInterval(() => {
+        setDisplayedTime(formatTime(elapsedTime));
+      }, 1000);
+      
+      return () => clearInterval(timer);
+    }
+  }, [isRunning, elapsedTime]);
 
   if (!isRunning) {
     return null;
   }
 
   // Format elapsed time
-  const formatTime = (seconds: number) => {
+  function formatTime(seconds: number) {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
+  }
 
   const handleStopTimer = () => {
     stopTimer().catch((error) => {
@@ -61,88 +75,74 @@ const TimerBar = () => {
   };
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white shadow-lg border-t border-gray-200 p-4 z-10">
-      <div className="container mx-auto flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <div
-            className="w-3 h-3 rounded-full bg-red-500 animate-pulse"
-            aria-label="Recording indicator"
-          />
+    <div className="fixed bottom-0 left-0 right-0 bg-surface-card shadow-8 p-3 z-5">
+      <div className="flex flex-column md:flex-row align-items-center justify-content-between gap-2">
+        <div className="flex align-items-center gap-2">
+          <div className="w-1rem h-1rem border-circle bg-red-500 flex-shrink-0 animate-pulse"></div>
           
-          <div className="flex flex-col">
-            <div className="flex items-center">
-              <span className="font-semibold text-lg">{currentTask?.name}</span>
-              <span className="mx-2 text-gray-400">in</span>
+          <div className="flex flex-column">
+            <div className="font-medium">{currentTask?.name}</div>
+            
+            <div className="flex align-items-center text-sm text-color-secondary">
+              <span>in</span>
               <div 
-                className="flex items-center px-2 py-1 rounded-md" 
-                style={{ backgroundColor: currentProject?.color + '20' }} // Adding opacity to the color
+                className="inline-flex align-items-center mx-2 px-2 py-1 border-round" 
+                style={{ backgroundColor: currentProject?.color + '20' }}
               >
                 <div
-                  className="w-3 h-3 rounded-full mr-2"
-                  style={{ backgroundColor: currentProject?.color }}
-                />
-                <span className="text-sm font-medium">{currentProject?.name}</span>
+                  className="inline-block border-circle mr-1 flex-shrink-0"
+                  style={{ backgroundColor: currentProject?.color, width: '0.5rem', height: '0.5rem' }}
+                ></div>
+                <span>{currentProject?.name}</span>
               </div>
             </div>
-            
-            {isDescriptionEditing ? (
-              <div className="flex items-center mt-1">
-                <input
-                  type="text"
-                  value={tempDescription}
-                  onChange={handleDescriptionChange}
-                  onBlur={handleDescriptionSave}
-                  onKeyDown={handleDescriptionKeyDown}
-                  className="border border-gray-300 rounded-md py-1 px-2 text-sm w-80"
-                  placeholder="Add a description..."
-                  autoFocus
-                />
-              </div>
-            ) : (
-              <div 
-                className="text-sm text-gray-500 mt-1 cursor-pointer hover:text-gray-700"
-                onClick={() => {
-                  setTempDescription(description);
-                  setIsDescriptionEditing(true);
-                }}
-              >
-                {description || 'Add a description...'}
-              </div>
-            )}
           </div>
         </div>
         
-        <div className="flex items-center space-x-4">
-          <div className="text-2xl font-mono font-bold">
-            {formatTime(elapsedTime)}
-          </div>
-          
-          <button
-            onClick={handleStopTimer}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
-          >
-            Stop
-          </button>
-          
-          <button
-            onClick={handleDiscardTimer}
-            className="text-gray-500 hover:text-gray-700"
-          >
-            <svg 
-              xmlns="http://www.w3.org/2000/svg" 
-              className="h-5 w-5" 
-              fill="none" 
-              viewBox="0 0 24 24" 
-              stroke="currentColor"
-            >
-              <path 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
-                strokeWidth={2} 
-                d="M6 18L18 6M6 6l12 12" 
+        <div className="flex-grow-1 md:flex-grow-0">
+          {isDescriptionEditing ? (
+            <div className="flex align-items-center">
+              <InputText
+                value={tempDescription}
+                onChange={handleDescriptionChange}
+                onBlur={handleDescriptionSave}
+                onKeyDown={handleDescriptionKeyDown}
+                className="w-full"
+                placeholder="Add a description..."
+                autoFocus
               />
-            </svg>
-          </button>
+            </div>
+          ) : (
+            <div 
+              className="text-color-secondary cursor-pointer hover:text-color-primary transition-colors transition-duration-200 text-center md:text-left"
+              onClick={() => {
+                setTempDescription(description);
+                setIsDescriptionEditing(true);
+              }}
+            >
+              {description || 'Add a description...'}
+            </div>
+          )}
+        </div>
+        
+        <div className="flex align-items-center gap-3">
+          <div className="font-medium font-mono text-xl">{displayedTime}</div>
+          
+          <div className="flex gap-2">
+            <Button
+              icon="pi pi-stop-circle"
+              className="p-button-rounded p-button-danger"
+              onClick={handleStopTimer}
+              tooltip="Stop timer"
+            />
+            
+            <Button
+              icon="pi pi-times"
+              className="p-button-rounded p-button-text p-button-secondary"
+              onClick={handleDiscardTimer}
+              tooltip="Discard timer"
+            />
+          </div>
         </div>
       </div>
     </div>

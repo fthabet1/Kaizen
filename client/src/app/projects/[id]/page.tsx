@@ -298,7 +298,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
 
       {/* Project Header */}
       {editingProject ? (
-        <div className="bg-white p-6 rounded-lg shadow-md mb-6">
+        <div className=" p-6 rounded-lg shadow-md mb-6">
           <h2 className="text-xl font-semibold mb-4">Edit Project</h2>
           <form onSubmit={handleUpdateProject}>
             <div className="grid grid-cols-1 gap-4">
@@ -417,17 +417,17 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
 
       {/* Stats Overview */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white p-4 rounded-lg shadow-md">
+        <div className=" p-4 rounded-lg shadow-md">
           <div className="text-sm text-gray-500">Total Time</div>
           <div className="text-2xl font-bold">
             {stats ? formatTime(stats.totalTime) : '0h 0m'}
           </div>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow-md">
+        <div className=" p-4 rounded-lg shadow-md">
           <div className="text-sm text-gray-500">Total Tasks</div>
           <div className="text-2xl font-bold">{stats ? stats.taskCount : 0}</div>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow-md">
+        <div className=" p-4 rounded-lg shadow-md">
           <div className="text-sm text-gray-500">Completed Tasks</div>
           <div className="text-2xl font-bold">
             {stats ? stats.completedTasks : 0} / {stats ? stats.totalTasks : 0}
@@ -445,7 +445,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
             ></div>
           </div>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow-md">
+        <div className=" p-4 rounded-lg shadow-md">
           <div className="text-sm text-gray-500">Time Entries</div>
           <div className="text-2xl font-bold">
             {stats ? stats.timeEntryCount : 0}
@@ -455,7 +455,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <div className="bg-white p-4 rounded-lg shadow-md">
+        <div className=" p-4 rounded-lg shadow-md">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-lg font-semibold">Time Tracking</h2>
             <select
@@ -505,7 +505,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-lg shadow-md">
+        <div className=" p-4 rounded-lg shadow-md">
           <h2 className="text-lg font-semibold mb-4">Task Completion</h2>
           <div className="h-64">
             {stats && stats.totalTasks > 0 ? (
@@ -548,7 +548,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
       </div>
 
       {/* Tasks Section */}
-      <div className="bg-white rounded-lg shadow-md overflow-hidden mb-6">
+      <div className=" rounded-lg shadow-md overflow-hidden mb-6">
         <div className="px-6 py-4 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
           <h2 className="font-bold text-lg">Tasks</h2>
           <div className="flex space-x-2">

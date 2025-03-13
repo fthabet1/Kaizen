@@ -6,6 +6,21 @@ import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import { useTimer } from '../../contexts/TimerContext';
 
+// PrimeReact imports
+import { DataTable } from 'primereact/datatable';
+import { Column } from 'primereact/column';
+import { Button } from 'primereact/button';
+import { InputText } from 'primereact/inputtext';
+import { Dropdown } from 'primereact/dropdown';
+import { Checkbox } from 'primereact/checkbox';
+import { Card } from 'primereact/card';
+import { Dialog } from 'primereact/dialog';
+import { InputTextarea } from 'primereact/inputtextarea';
+import { Tag } from 'primereact/tag';
+import { ProgressSpinner } from 'primereact/progressspinner';
+import { confirmDialog, ConfirmDialog } from 'primereact/confirmdialog';
+import { Toolbar } from 'primereact/toolbar';
+
 interface Project {
   id: number;
   name: string;
@@ -28,17 +43,18 @@ export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loadingData, setLoadingData] = useState(true);
-  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [taskDialog, setTaskDialog] = useState(false);
   const [newTask, setNewTask] = useState({
     name: '',
     description: '',
     project_id: 0,
   });
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [isNewTask, setIsNewTask] = useState(true);
+  const [globalFilter, setGlobalFilter] = useState('');
   const [filter, setFilter] = useState({
     projectId: 0,
     showCompleted: false,
-    searchTerm: '',
   });
 
   // Redirect if not logged in
@@ -67,9 +83,6 @@ export default function TasksPage() {
       if (!filter.showCompleted) {
         params.append('is_completed', 'false');
       }
-      if (filter.searchTerm) {
-        params.append('search', filter.searchTerm);
-      }
       
       const [tasksResponse, projectsResponse] = await Promise.all([
         axios.get(`/api/tasks?${params.toString()}`),
@@ -93,54 +106,73 @@ export default function TasksPage() {
     }
   };
 
-  const handleCreateTask = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (newTask.project_id === 0) {
-      alert('Please select a project');
-      return;
-    }
-    
+  const openNew = () => {
+    setNewTask({
+      name: '',
+      description: '',
+      project_id: projects.length > 0 ? projects[0].id : 0,
+    });
+    setIsNewTask(true);
+    setTaskDialog(true);
+  };
+
+  const openEdit = (task: Task) => {
+    setEditingTask(task);
+    setIsNewTask(false);
+    setTaskDialog(true);
+  };
+
+  const hideDialog = () => {
+    setTaskDialog(false);
+    setEditingTask(null);
+  };
+
+  const handleSaveTask = async () => {
     try {
-      const response = await axios.post('/api/tasks', newTask);
-      setTasks([...tasks, response.data]);
-      setNewTask({
-        name: '',
-        description: '',
-        project_id: newTask.project_id, // Keep the same project selected
-      });
-      setShowCreateForm(false);
+      if (isNewTask) {
+        // Create new task
+        if (newTask.project_id === 0) {
+          return; // Should be prevented by UI
+        }
+        
+        const response = await axios.post('/api/tasks', newTask);
+        setTasks([...tasks, response.data]);
+        setNewTask({
+          name: '',
+          description: '',
+          project_id: newTask.project_id, // Keep the same project selected
+        });
+      } else if (editingTask) {
+        // Update existing task
+        const response = await axios.put(`/api/tasks/${editingTask.id}`, {
+          name: editingTask.name,
+          description: editingTask.description,
+          project_id: editingTask.project_id,
+        });
+        
+        setTasks(
+          tasks.map((t) => (t.id === editingTask.id ? response.data : t))
+        );
+      }
+      
+      setTaskDialog(false);
+      setEditingTask(null);
     } catch (error) {
-      console.error('Error creating task', error);
+      console.error('Error saving task', error);
     }
   };
 
-  const handleUpdateTask = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!editingTask) return;
-    
-    try {
-      const response = await axios.put(`/api/tasks/${editingTask.id}`, {
-        name: editingTask.name,
-        description: editingTask.description,
-        project_id: editingTask.project_id,
-      });
-      
-      setTasks(
-        tasks.map((t) => (t.id === editingTask.id ? response.data : t))
-      );
-      setEditingTask(null);
-    } catch (error) {
-      console.error('Error updating task', error);
-    }
+  const confirmDeleteTask = (task: Task) => {
+    confirmDialog({
+      message: 'Are you sure you want to delete this task? This will also delete all associated time entries.',
+      header: 'Confirm Delete',
+      icon: 'pi pi-exclamation-triangle',
+      acceptClassName: 'p-button-danger',
+      accept: () => handleDeleteTask(task.id)
+    });
   };
 
   const handleDeleteTask = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this task? This will also delete all associated time entries.')) {
-      return;
-    }
-    
     try {
       await axios.delete(`/api/tasks/${id}`);
       setTasks(tasks.filter((t) => t.id !== id));
@@ -180,465 +212,256 @@ export default function TasksPage() {
     return projects.find((p) => p.id === id);
   };
 
+  // DataTable Templates
+  const taskNameTemplate = (rowData: Task) => {
+    return (
+      <div>
+        <div className="font-medium">{rowData.name}</div>
+        {rowData.description && (
+          <div className="text-sm text-color-secondary mt-1 truncate max-w-md">
+            {rowData.description}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const projectTemplate = (rowData: Task) => {
+    const project = getProjectById(rowData.project_id);
+    if (!project) return null;
+    
+    return (
+      <div className="flex align-items-center">
+        <div 
+          className="w-1rem h-1rem border-circle mr-2" 
+          style={{ backgroundColor: project.color }}
+        ></div>
+        <span>{project.name}</span>
+      </div>
+    );
+  };
+
+  const dateTemplate = (rowData: Task) => {
+    return new Date(rowData.created_at).toLocaleDateString();
+  };
+
+  const statusTemplate = (rowData: Task) => {
+    return (
+      <Tag 
+        severity={rowData.is_completed ? 'success' : 'warning'} 
+        value={rowData.is_completed ? 'Completed' : 'In Progress'}
+      />
+    );
+  };
+
+  const actionTemplate = (rowData: Task) => {
+    const isCurrentlyTracking = isRunning && currentTask?.id === rowData.id;
+    
+    return (
+      <div className="flex gap-2 justify-content-end">
+        {!rowData.is_completed && (
+          <Button 
+            icon={isCurrentlyTracking ? "pi pi-clock" : "pi pi-play"} 
+            className={`p-button-rounded p-button-text ${isCurrentlyTracking ? 'p-button-success' : ''}`} 
+            tooltip={isCurrentlyTracking ? "Currently tracking" : "Start timer"}
+            tooltipOptions={{ position: 'left' }}
+            onClick={() => handleStartTaskTimer(rowData)} 
+          />
+        )}
+        <Button 
+          icon={rowData.is_completed ? "pi pi-refresh" : "pi pi-check"} 
+          className={`p-button-rounded p-button-text ${rowData.is_completed ? 'p-button-warning' : 'p-button-success'}`} 
+          tooltip={rowData.is_completed ? "Reopen" : "Complete"}
+          tooltipOptions={{ position: 'left' }}
+          onClick={() => handleToggleComplete(rowData.id, rowData.is_completed)} 
+        />
+        <Button 
+          icon="pi pi-pencil" 
+          className="p-button-rounded p-button-text" 
+          tooltip="Edit"
+          tooltipOptions={{ position: 'left' }}
+          onClick={() => openEdit(rowData)} 
+        />
+        <Button 
+          icon="pi pi-trash" 
+          className="p-button-rounded p-button-text p-button-danger" 
+          tooltip="Delete"
+          tooltipOptions={{ position: 'left' }}
+          onClick={() => confirmDeleteTask(rowData)} 
+        />
+      </div>
+    );
+  };
+
+  const header = (
+    <div className="flex flex-column md:flex-row md:justify-content-between md:align-items-center">
+      <h5 className="m-0">Tasks</h5>
+      <span className="p-input-icon-left">
+        <i className="pi pi-search" />
+        <InputText 
+          type="search" 
+          onInput={(e) => setGlobalFilter((e.target as HTMLInputElement).value)} 
+          placeholder="Search..." 
+        />
+      </span>
+    </div>
+  );
+
+  const toolbarStart = () => {
+    return (
+      <h1 className="text-2xl font-medium m-0">Tasks</h1>
+    );
+  };
+  
+  const toolbarEnd = () => {
+    return (
+      <div className="flex gap-2">
+        <Dropdown
+          value={filter.projectId}
+          options={[{label: 'All Projects', value: 0}, ...projects.map(p => ({label: p.name, value: p.id}))]}
+          onChange={(e) => setFilter({...filter, projectId: e.value})}
+          placeholder="Filter by Project"
+        />
+        
+        <div className="flex align-items-center gap-2">
+          <Checkbox
+            inputId="show-completed"
+            checked={filter.showCompleted}
+            onChange={(e) => setFilter({...filter, showCompleted: e.checked!})}
+          />
+          <label htmlFor="show-completed" className="text-sm">Show completed</label>
+        </div>
+        
+        <Button 
+          label="New Task" 
+          icon="pi pi-plus" 
+          onClick={openNew} 
+          className="p-button-primary" 
+        />
+      </div>
+    );
+  };
+
+  const taskDialogFooter = (
+    <>
+      <Button label="Cancel" icon="pi pi-times" className="p-button-text" onClick={hideDialog} />
+      <Button label={isNewTask ? "Create" : "Save"} icon="pi pi-check" onClick={handleSaveTask} />
+    </>
+  );
+
+  const emptyMessage = () => {
+    return (
+      <div className="text-center py-5">
+        <i className="pi pi-check-square text-4xl text-gray-400 mb-3"></i>
+        <h3 className="text-lg font-medium mb-2">No Tasks Found</h3>
+        <p className="mb-4">
+          {filter.projectId > 0 || filter.showCompleted
+            ? 'Try adjusting your filters'
+            : 'Get started by creating your first task.'}
+        </p>
+        {!filter.projectId && !filter.showCompleted && (
+          <Button label="Create Task" icon="pi pi-plus" onClick={openNew} />
+        )}
+      </div>
+    );
+  };
+
   if (loading || loadingData) {
     return (
-      <div className="flex justify-center items-center h-96">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      <div className="flex justify-content-center align-items-center" style={{ height: '60vh' }}>
+        <ProgressSpinner />
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Tasks</h1>
-        <button
-          onClick={() => setShowCreateForm(true)}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+    <div className="p-3 md:p-4">
+      <Card>
+        <Toolbar start={toolbarStart} end={toolbarEnd} />
+        
+        <DataTable 
+          value={tasks} 
+          paginator 
+          rows={10} 
+          rowsPerPageOptions={[5, 10, 25]} 
+          dataKey="id" 
+          rowHover
+          stripedRows
+          globalFilter={globalFilter}
+          emptyMessage={emptyMessage}
+          header={header}
+          className="mt-4"
+          responsiveLayout="stack"
+          breakpoint="768px"
         >
-          New Task
-        </button>
-      </div>
+          <Column field="name" header="Task" body={taskNameTemplate} sortable style={{ minWidth: '16rem' }}></Column>
+          <Column field="project_id" header="Project" body={projectTemplate} sortable style={{ minWidth: '10rem' }}></Column>
+          <Column field="created_at" header="Created" body={dateTemplate} sortable className="hidden md:table-cell" style={{ minWidth: '8rem' }}></Column>
+          <Column field="is_completed" header="Status" body={statusTemplate} sortable style={{ minWidth: '8rem' }}></Column>
+          <Column body={actionTemplate} style={{ width: '9rem' }}></Column>
+        </DataTable>
+      </Card>
 
-      {/* Filters */}
-      <div className="bg-white p-4 rounded-lg shadow-md mb-6">
-        <div className="flex flex-col md:flex-row md:items-center md:space-x-4 space-y-4 md:space-y-0">
-          <div className="flex-1">
-            <label htmlFor="search-tasks" className="sr-only">
-              Search Tasks
-            </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <svg
-                  className="h-5 w-5 text-gray-400"
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                  aria-hidden="true"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-              </div>
-              <input
-                id="search-tasks"
-                name="search-tasks"
-                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                placeholder="Search tasks"
-                type="search"
-                value={filter.searchTerm}
-                onChange={(e) =>
-                  setFilter({ ...filter, searchTerm: e.target.value })
-                }
-              />
-            </div>
-          </div>
-
-          <div>
-            <label htmlFor="project-filter" className="sr-only">
-              Filter by Project
-            </label>
-            <select
-              id="project-filter"
-              name="project-filter"
-              className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
-              value={filter.projectId}
-              onChange={(e) =>
-                setFilter({ ...filter, projectId: parseInt(e.target.value) })
-              }
-            >
-              <option value={0}>All Projects</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex items-center">
-            <input
-              id="show-completed"
-              name="show-completed"
-              type="checkbox"
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-              checked={filter.showCompleted}
-              onChange={(e) =>
-                setFilter({ ...filter, showCompleted: e.target.checked })
-              }
-            />
-            <label
-              htmlFor="show-completed"
-              className="ml-2 block text-sm text-gray-900"
-            >
-              Show completed tasks
-            </label>
-          </div>
+      <Dialog 
+        visible={taskDialog} 
+        header={isNewTask ? 'Create Task' : 'Edit Task'} 
+        modal 
+        className="p-fluid"
+        footer={taskDialogFooter} 
+        onHide={hideDialog}
+      >
+        <div className="field mt-4 mb-4">
+          <label htmlFor="name" className="font-medium mb-2 block">Task Name*</label>
+          <InputText 
+            id="name" 
+            value={isNewTask ? newTask.name : editingTask?.name || ''} 
+            onChange={(e) => isNewTask 
+              ? setNewTask({...newTask, name: e.target.value})
+              : setEditingTask(prev => prev ? {...prev, name: e.target.value} : prev)
+            } 
+            required 
+            autoFocus 
+            placeholder="Enter task name"
+            className={isNewTask ? (newTask.name ? '' : 'p-invalid') : ''}
+          />
+          {isNewTask && !newTask.name && <small className="p-error">Task name is required.</small>}
         </div>
-      </div>
 
-      {/* Create Task Form */}
-      {showCreateForm && (
-        <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-          <h2 className="text-lg font-semibold mb-4">Create New Task</h2>
-          <form onSubmit={handleCreateTask}>
-            <div className="grid grid-cols-1 gap-4">
-              <div>
-                <label
-                  htmlFor="task-name"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  Task Name
-                </label>
-                <input
-                  type="text"
-                  id="task-name"
-                  required
-                  value={newTask.name}
-                  onChange={(e) =>
-                    setNewTask({ ...newTask, name: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Enter task name"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="task-description"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  Description (optional)
-                </label>
-                <textarea
-                  id="task-description"
-                  value={newTask.description}
-                  onChange={(e) =>
-                    setNewTask({ ...newTask, description: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  rows={3}
-                  placeholder="Enter task description"
-                ></textarea>
-              </div>
-
-              <div>
-                <label
-                  htmlFor="task-project"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  Project
-                </label>
-                <select
-                  id="task-project"
-                  required
-                  value={newTask.project_id}
-                  onChange={(e) =>
-                    setNewTask({
-                      ...newTask,
-                      project_id: parseInt(e.target.value),
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value={0} disabled>
-                    Select a project
-                  </option>
-                  {projects.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="flex justify-end space-x-2 mt-4">
-              <button
-                type="button"
-                onClick={() => setShowCreateForm(false)}
-                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              >
-                Create Task
-              </button>
-            </div>
-          </form>
+        <div className="field mb-4">
+          <label htmlFor="description" className="font-medium mb-2 block">Description</label>
+          <InputTextarea 
+            id="description" 
+            value={isNewTask ? newTask.description : editingTask?.description || ''} 
+            onChange={(e) => isNewTask 
+              ? setNewTask({...newTask, description: e.target.value})
+              : setEditingTask(prev => prev ? {...prev, description: e.target.value} : prev)
+            } 
+            rows={3} 
+            placeholder="Enter task description (optional)"
+          />
         </div>
-      )}
 
-      {/* Edit Task Form */}
-      {editingTask && (
-        <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-          <h2 className="text-lg font-semibold mb-4">Edit Task</h2>
-          <form onSubmit={handleUpdateTask}>
-            <div className="grid grid-cols-1 gap-4">
-              <div>
-                <label
-                  htmlFor="edit-task-name"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  Task Name
-                </label>
-                <input
-                  type="text"
-                  id="edit-task-name"
-                  required
-                  value={editingTask.name}
-                  onChange={(e) =>
-                    setEditingTask({
-                      ...editingTask,
-                      name: e.target.value,
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Enter task name"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="edit-task-description"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  Description (optional)
-                </label>
-                <textarea
-                  id="edit-task-description"
-                  value={editingTask.description || ''}
-                  onChange={(e) =>
-                    setEditingTask({
-                      ...editingTask,
-                      description: e.target.value,
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  rows={3}
-                  placeholder="Enter task description"
-                ></textarea>
-              </div>
-
-              <div>
-                <label
-                  htmlFor="edit-task-project"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  Project
-                </label>
-                <select
-                  id="edit-task-project"
-                  required
-                  value={editingTask.project_id}
-                  onChange={(e) =>
-                    setEditingTask({
-                      ...editingTask,
-                      project_id: parseInt(e.target.value),
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                >
-                  {projects.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="flex justify-end space-x-2 mt-4">
-              <button
-                type="button"
-                onClick={() => setEditingTask(null)}
-                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              >
-                Update Task
-              </button>
-            </div>
-          </form>
+        <div className="field">
+          <label htmlFor="project" className="font-medium mb-2 block">Project*</label>
+          <Dropdown
+            id="project"
+            value={isNewTask ? newTask.project_id : editingTask?.project_id}
+            options={projects.map(p => ({label: p.name, value: p.id}))}
+            onChange={(e) => isNewTask 
+              ? setNewTask({...newTask, project_id: e.value})
+              : setEditingTask(prev => prev ? {...prev, project_id: e.value} : prev)
+            }
+            placeholder="Select a project"
+            filter
+            showClear={false}
+            required
+            className={isNewTask ? (newTask.project_id ? '' : 'p-invalid') : ''}
+          />
+          {isNewTask && !newTask.project_id && <small className="p-error">Project is required.</small>}
         </div>
-      )}
+      </Dialog>
 
-      {/* Tasks List */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        {tasks.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Task
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Project
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell"
-                  >
-                    Created
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Status
-                  </th>
-                  <th scope="col" className="relative px-6 py-3">
-                    <span className="sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {tasks.map((task) => {
-                  const project = getProjectById(task.project_id);
-                  const isCurrentlyTracking = isRunning && currentTask?.id === task.id;
-                  
-                  return (
-                    <tr key={task.id}>
-                      <td className="px-6 py-4">
-                        <div className="text-sm font-medium text-gray-900">
-                          {task.name}
-                        </div>
-                        {task.description && (
-                          <div className="text-sm text-gray-500 mt-1 truncate max-w-xs">
-                            {task.description}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {project && (
-                          <div className="flex items-center">
-                            <div
-                              className="w-3 h-3 rounded-full mr-2"
-                              style={{ backgroundColor: project.color }}
-                            ></div>
-                            <div className="text-sm text-gray-900">{project.name}</div>
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
-                        {new Date(task.created_at).toLocaleDateString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                            task.is_completed
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-yellow-100 text-yellow-800'
-                          }`}
-                        >
-                          {task.is_completed ? 'Completed' : 'In Progress'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex justify-end space-x-2">
-                          {!task.is_completed && (
-                            <button
-                              onClick={() => handleStartTaskTimer(task)}
-                              className={`${
-                                isCurrentlyTracking
-                                  ? 'text-green-600'
-                                  : 'text-blue-600 hover:text-blue-900'
-                              }`}
-                            >
-                              {isCurrentlyTracking ? 'Tracking...' : 'Start Timer'}
-                            </button>
-                          )}
-                          <button
-                            onClick={() => handleToggleComplete(task.id, task.is_completed)}
-                            className={`text-${task.is_completed ? 'yellow' : 'green'}-600 hover:text-${task.is_completed ? 'yellow' : 'green'}-900`}
-                          >
-                            {task.is_completed ? 'Reopen' : 'Complete'}
-                          </button>
-                          <button
-                            onClick={() => setEditingTask(task)}
-                            className="text-blue-600 hover:text-blue-900"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDeleteTask(task.id)}
-                            className="text-red-600 hover:text-red-900"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="text-center py-10 px-6">
-            <svg
-              className="mx-auto h-12 w-12 text-gray-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              aria-hidden="true"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
-              />
-            </svg>
-            <h3 className="mt-2 text-sm font-medium text-gray-900">No tasks found</h3>
-            <p className="mt-1 text-sm text-gray-500">
-              {filter.projectId > 0 || filter.searchTerm || filter.showCompleted
-                ? 'Try adjusting your filters'
-                : 'Get started by creating a new task'}
-            </p>
-            {!filter.projectId && !filter.searchTerm && !filter.showCompleted && (
-              <div className="mt-6">
-                <button
-                  onClick={() => setShowCreateForm(true)}
-                  className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  <svg
-                    className="-ml-1 mr-2 h-5 w-5"
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                    aria-hidden="true"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                  New Task
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      <ConfirmDialog />
     </div>
   );
 }
