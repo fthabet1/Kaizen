@@ -1,3 +1,5 @@
+'use client';
+
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import axios from 'axios';
 import { useAuth } from './AuthContexts';
@@ -51,6 +53,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   // Load active timer from localStorage on init
   useEffect(() => {
     if (user) {
+      // Try to load from localStorage
       const savedTimer = localStorage.getItem(`timer_${user.uid}`);
       if (savedTimer) {
         try {
@@ -74,6 +77,49 @@ export function TimerProvider({ children }: { children: ReactNode }) {
           localStorage.removeItem(`timer_${user.uid}`);
         }
       }
+
+      // Check if there's an active timer in the database
+      const checkActiveTimer = async () => {
+        try {
+          const response = await axios.get('/api/time-entries/active');
+          if (response.data) {
+            const activeEntry = response.data;
+            
+            setCurrentTask({
+              id: activeEntry.task_id,
+              name: activeEntry.task_name,
+              project_id: activeEntry.project_id
+            });
+            
+            setCurrentProject({
+              id: activeEntry.project_id,
+              name: activeEntry.project_name,
+              color: activeEntry.project_color
+            });
+            
+            setStartTime(new Date(activeEntry.start_time));
+            setDescription(activeEntry.description || '');
+            setIsRunning(true);
+            
+            // Save to localStorage as backup
+            if (user.uid) {
+              localStorage.setItem(`timer_${user.uid}`, JSON.stringify({
+                taskId: activeEntry.task_id,
+                taskName: activeEntry.task_name,
+                projectId: activeEntry.project_id,
+                projectName: activeEntry.project_name,
+                projectColor: activeEntry.project_color,
+                startTimeStr: activeEntry.start_time,
+                description: activeEntry.description || ''
+              }));
+            }
+          }
+        } catch (error) {
+          console.error('Error checking active timer:', error);
+        }
+      };
+      
+      checkActiveTimer();
     }
   }, [user]);
 
@@ -158,6 +204,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       setIsRunning(true);
     } catch (error) {
       console.error('Error starting timer', error);
+      // Show a user-friendly error message here if needed
       throw error;
     }
   };
@@ -189,17 +236,34 @@ export function TimerProvider({ children }: { children: ReactNode }) {
           duration,
           description
         });
+        
+        // Reset state
+        setIsRunning(false);
+        setCurrentTask(null);
+        setCurrentProject(null);
+        setStartTime(null);
+        setElapsedTime(0);
+        setDescription('');
+        
+        // Return for chaining
+        return;
+      } else {
+        // No active entry found - this is unusual but we can handle it
+        console.warn('No active time entry found to stop');
+        
+        // Reset state anyway
+        setIsRunning(false);
+        setCurrentTask(null);
+        setCurrentProject(null);
+        setStartTime(null);
+        setElapsedTime(0);
+        setDescription('');
+        
+        return;
       }
-      
-      // Reset state
-      setIsRunning(false);
-      setCurrentTask(null);
-      setCurrentProject(null);
-      setStartTime(null);
-      setElapsedTime(0);
-      setDescription('');
     } catch (error) {
       console.error('Error stopping timer', error);
+      // Show a user-friendly error message here if needed
       throw error;
     }
   };

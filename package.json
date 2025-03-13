@@ -1,0 +1,24 @@
+{
+    "name": "kaizen-productivity-tracker",
+    "version": "1.0.0",
+    "description": "Full-stack productivity and time tracking application",
+    "main": "index.js",
+    "scripts": {
+      "client": "cd client && npm run dev",
+      "server": "cd server && npm run dev",
+      "dev": "concurrently \"npm run server\" \"npm run client\"",
+      "install:all": "npm install && cd client && npm install && cd ../server && npm install",
+      "build": "cd client && npm run build && cd ../server && npm run build",
+      "start": "cd server && npm start"
+    },
+    "keywords": [
+      "productivity",
+      "time-tracking",
+      "fullstack"
+    ],
+    "author": "",
+    "license": "ISC",
+    "devDependencies": {
+      "concurrently": "^8.2.2"
+    }
+  }

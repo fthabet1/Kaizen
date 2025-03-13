@@ -2,8 +2,9 @@
 import { Request, Response } from 'express';
 import UserModel from '../models/userModel';
 import { CreateUserDto } from '../types';
+import db from '../config/db';
 
-export const registerUser = async (req: Request, res: Response) => {
+export const registerUser = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.user?.userId;
     
@@ -12,16 +13,25 @@ export const registerUser = async (req: Request, res: Response) => {
       return;
     }
     
+    console.log(`Processing registration for auth_id: ${userId}`);
+    
     // Check if user already exists
     const existingUser = await UserModel.findByAuthId(userId);
     
     if (existingUser) {
-      // User already exists, return it
-      res.status(200).json(existingUser);
+      console.log(`User already exists, returning user: ${existingUser.id}`);
+      // User already exists, update their profile info if it has changed
+      const updated = await UserModel.update(existingUser.id, {
+        name: req.body.name || existingUser.name,
+        email: req.body.email || existingUser.email
+      });
+      
+      res.status(200).json(updated);
       return;
     }
     
     // Create new user
+    console.log(`Creating new user with email: ${req.body.email}`);
     const userData: CreateUserDto = {
       auth_id: userId,
       email: req.body.email,
@@ -33,6 +43,8 @@ export const registerUser = async (req: Request, res: Response) => {
     // Create default settings for the user
     await createDefaultSettings(newUser.id);
     
+    console.log(`User created successfully with ID: ${newUser.id}`);
+    
     res.status(201).json(newUser);
   } catch (error: any) {
     console.error('Error registering user:', error);
@@ -40,7 +52,7 @@ export const registerUser = async (req: Request, res: Response) => {
   }
 };
 
-export const getUserProfile = async (req: Request, res: Response) => {
+export const getUserProfile = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.user?.userId;
     
@@ -63,7 +75,7 @@ export const getUserProfile = async (req: Request, res: Response) => {
   }
 };
 
-export const updateUserProfile = async (req: Request, res: Response) => {
+export const updateUserProfile = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.user?.userId;
     
@@ -91,7 +103,7 @@ export const updateUserProfile = async (req: Request, res: Response) => {
   }
 };
 
-export const getUserSettings = async (req: Request, res: Response) => {
+export const getUserSettings = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.user?.userId;
     
@@ -109,7 +121,7 @@ export const getUserSettings = async (req: Request, res: Response) => {
     
     const userWithSettings = await UserModel.getUserWithSettings(user.id);
     
-    if (!userWithSettings) {
+    if (!userWithSettings || !userWithSettings.theme) {
       // Create default settings if none exist
       await createDefaultSettings(user.id);
       const newUserWithSettings = await UserModel.getUserWithSettings(user.id);
@@ -135,7 +147,7 @@ export const getUserSettings = async (req: Request, res: Response) => {
   }
 };
 
-export const updateUserSettings = async (req: Request, res: Response) => {
+export const updateUserSettings = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.user?.userId;
     
@@ -148,13 +160,13 @@ export const updateUserSettings = async (req: Request, res: Response) => {
     
     if (!user) {
       res.status(404).json({ error: 'User not found' });
-      return
+      return;
     }
     
     // Check if settings exist
     const userWithSettings = await UserModel.getUserWithSettings(user.id);
     
-    if (!userWithSettings.theme) {
+    if (!userWithSettings || !userWithSettings.theme) {
       // Create default settings if none exist
       await createDefaultSettings(user.id);
     }
@@ -191,6 +203,7 @@ const createDefaultSettings = async (userId: number) => {
   
   try {
     await db.query(query, [userId]);
+    console.log(`Created default settings for user: ${userId}`);
   } catch (error) {
     console.error('Error creating default settings:', error);
     throw error;
@@ -260,6 +273,3 @@ const updateSettings = async (
     throw error;
   }
 };
-
-// Import the database client for queries
-import db from '../config/db';

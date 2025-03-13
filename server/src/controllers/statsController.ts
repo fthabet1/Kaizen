@@ -251,7 +251,13 @@ export const getDailyPatterns = async (req: Request, res: Response) => {
       
       // Transform into a more useful format
       const hourlyByDay = [0, 1, 2, 3, 4, 5, 6].map(day => {
-        const dayEntries = hourlyResult.rows.filter(row => parseInt(row.day_of_week) === day);
+        interface HourlyEntry {
+          day_of_week: string;
+          hour: string;
+          total_time: string;
+        }
+        
+        const dayEntries: HourlyEntry[] = hourlyResult.rows.filter((row: HourlyEntry) => parseInt(row.day_of_week) === day);
         const hourData = Array(24).fill(0);
         
         dayEntries.forEach(entry => {

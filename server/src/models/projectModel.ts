@@ -3,11 +3,8 @@ import db from '../config/db';
 import { Project, CreateProjectDto, UpdateProjectDto } from '../types';
 
 class ProjectModel {
-  /**
-   * Create a new project
-   */
+
   static async create(userId: string, projectData: CreateProjectDto): Promise<Project> {
-    // Get the user's internal ID from the auth_id
     const userResult = await db.query('SELECT id FROM users WHERE auth_id = $1', [userId]);
     
     if (userResult.rows.length === 0) {

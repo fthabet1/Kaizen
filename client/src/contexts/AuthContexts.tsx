@@ -11,10 +11,10 @@ import {
     User,
     updateProfile
 } from 'firebase/auth';
-import axios from 'axios';
+import axios from '../utils/axiosConfig';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 
-    const firebaseConfig = {
+const firebaseConfig = {
     apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
     authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
     projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
@@ -65,13 +65,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 
                 // Register or update user in our backend
                 try {
-                    await axios.post('/api/users/register', {
-                        auth_id: firebaseUser.uid,
-                        email: firebaseUser.email,
-                        name: firebaseUser.displayName || ''
-                    });
+                    await registerUserInBackend(firebaseUser, idToken);
                 } catch (error) {
                     console.error('Error registering user in backend', error);
+                    // Don't set an auth error here as the main authentication did succeed
                 }
             } else {
                 // User is not authenticated
@@ -85,12 +82,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return () => unsubscribe();
     }, []);
 
+    // Helper function to register user in backend
+    const registerUserInBackend = async (firebaseUser: User, idToken: string) => {
+        try {
+            // Set the token in axios headers for this request
+            const headers = {
+                'Authorization': `Bearer ${idToken}`,
+                'Content-Type': 'application/json'
+            };
+            
+            // Make the API call to register/update user in backend
+            await axios.post('/api/users/register', {
+                auth_id: firebaseUser.uid,
+                email: firebaseUser.email,
+                name: firebaseUser.displayName || ''
+            }, { headers });
+            
+            console.log('User registered/updated in backend successfully');
+        } catch (error) {
+            console.error('Failed to register user in backend:', error);
+            throw error;
+        }
+    };
+
     // Sign in with email and password (Firebase)
     const signInWithEmail = async (email: string, password: string) => {
         try {
             setAuthError(null);
             setLoading(true);
             await signInWithEmailAndPassword(firebaseAuth, email, password);
+            // Note: User registration in backend will be handled by the auth state change listener
         } catch (error: unknown) {
             setAuthError((error as Error).message);
             throw error;
@@ -112,6 +133,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 await updateProfile(userCredential.user, {
                     displayName: name
                 });
+                
+                // Get fresh token after profile update
+                const idToken = await userCredential.user.getIdToken(true);
+                
+                // Explicitly register in backend here for newly created users
+                await registerUserInBackend(userCredential.user, idToken);
             }
         } catch (error: unknown) {
             setAuthError((error as Error).message);
@@ -129,6 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setAuthError(null);
             setLoading(true);
             await signInWithPopup(firebaseAuth, provider);
+            // Note: User registration in backend will be handled by the auth state change listener
         } catch (error: unknown) {
             setAuthError((error as Error).message);
             throw error;
@@ -169,4 +197,3 @@ export function useAuth() {
     }
     return context;
 }
-
