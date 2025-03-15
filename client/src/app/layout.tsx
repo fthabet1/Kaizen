@@ -16,8 +16,21 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
-      <body>
+    <html lang="en" className="dark">
+      <head>
+        <script dangerouslySetInnerHTML={{
+          __html: `
+            (function() {
+              // Check localStorage for theme or use dark as default
+              var theme = localStorage.theme || 'dark';
+              document.documentElement.classList.add(theme);
+              document.documentElement.style.backgroundColor = theme === 'dark' ? '#121212' : '#ffffff';
+              document.documentElement.style.color = theme === 'dark' ? '#ffffff' : '#000000';
+            })();
+          `
+        }} />
+      </head>
+      <body className="bg-gray-900 text-white">
         <Providers>
           <MainLayout>
             {children}

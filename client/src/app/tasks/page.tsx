@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -37,7 +38,7 @@ interface Task {
 }
 
 export default function TasksPage() {
-  const { user, loading } = useAuth();
+  const { user, loading, isReady } = useAuth();
   const { isRunning, currentTask, startTimer } = useTimer();
   const router = useRouter();
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -59,17 +60,17 @@ export default function TasksPage() {
 
   // Redirect if not logged in
   useEffect(() => {
-    if (!loading && !user) {
+    if (isReady && !user) {
       router.push('/auth/login');
     }
-  }, [user, loading, router]);
+  }, [user, isReady, router]);
 
   // Fetch tasks and projects
   useEffect(() => {
-    if (user) {
+    if (user && isReady) {
       fetchTasksAndProjects();
     }
-  }, [user, filter]);
+  }, [user, isReady, filter]);
 
   const fetchTasksAndProjects = async () => {
     try {
@@ -265,7 +266,10 @@ export default function TasksPage() {
             className={`p-button-rounded p-button-text ${isCurrentlyTracking ? 'p-button-success' : ''}`} 
             tooltip={isCurrentlyTracking ? "Currently tracking" : "Start timer"}
             tooltipOptions={{ position: 'left' }}
-            onClick={() => handleStartTaskTimer(rowData)} 
+            onClick={(e) => {
+              e.stopPropagation();
+              handleStartTaskTimer(rowData);
+            }} 
           />
         )}
         <Button 
@@ -273,21 +277,30 @@ export default function TasksPage() {
           className={`p-button-rounded p-button-text ${rowData.is_completed ? 'p-button-warning' : 'p-button-success'}`} 
           tooltip={rowData.is_completed ? "Reopen" : "Complete"}
           tooltipOptions={{ position: 'left' }}
-          onClick={() => handleToggleComplete(rowData.id, rowData.is_completed)} 
+          onClick={(e) => {
+            e.stopPropagation();
+            handleToggleComplete(rowData.id, rowData.is_completed);
+          }} 
         />
         <Button 
           icon="pi pi-pencil" 
           className="p-button-rounded p-button-text" 
           tooltip="Edit"
           tooltipOptions={{ position: 'left' }}
-          onClick={() => openEdit(rowData)} 
+          onClick={(e) => {
+            e.stopPropagation();
+            openEdit(rowData);
+          }} 
         />
         <Button 
           icon="pi pi-trash" 
           className="p-button-rounded p-button-text p-button-danger" 
           tooltip="Delete"
           tooltipOptions={{ position: 'left' }}
-          onClick={() => confirmDeleteTask(rowData)} 
+          onClick={(e) => {
+            e.stopPropagation();
+            confirmDeleteTask(rowData);
+          }} 
         />
       </div>
     );
@@ -295,7 +308,7 @@ export default function TasksPage() {
 
   const header = (
     <div className="flex flex-column md:flex-row md:justify-content-between md:align-items-center">
-      <h5 className="m-0">Tasks</h5>
+      <h5 className="m-0">Manage Tasks</h5>
       <span className="p-input-icon-left">
         <i className="pi pi-search" />
         <InputText 
@@ -315,12 +328,13 @@ export default function TasksPage() {
   
   const toolbarEnd = () => {
     return (
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-column md:flex-row">
         <Dropdown
           value={filter.projectId}
           options={[{label: 'All Projects', value: 0}, ...projects.map(p => ({label: p.name, value: p.id}))]}
           onChange={(e) => setFilter({...filter, projectId: e.value})}
           placeholder="Filter by Project"
+          className="w-full md:w-auto"
         />
         
         <div className="flex align-items-center gap-2">
@@ -366,7 +380,7 @@ export default function TasksPage() {
     );
   };
 
-  if (loading || loadingData) {
+  if (loading || (!isReady) || loadingData) {
     return (
       <div className="flex justify-content-center align-items-center" style={{ height: '60vh' }}>
         <ProgressSpinner />
@@ -377,29 +391,92 @@ export default function TasksPage() {
   return (
     <div className="p-3 md:p-4">
       <Card>
-        <Toolbar start={toolbarStart} end={toolbarEnd} />
+        <Toolbar start={toolbarStart} end={toolbarEnd} className="mb-4" />
         
-        <DataTable 
-          value={tasks} 
-          paginator 
-          rows={10} 
-          rowsPerPageOptions={[5, 10, 25]} 
-          dataKey="id" 
-          rowHover
-          stripedRows
-          globalFilter={globalFilter}
-          emptyMessage={emptyMessage}
-          header={header}
-          className="mt-4"
-          responsiveLayout="stack"
-          breakpoint="768px"
-        >
-          <Column field="name" header="Task" body={taskNameTemplate} sortable style={{ minWidth: '16rem' }}></Column>
-          <Column field="project_id" header="Project" body={projectTemplate} sortable style={{ minWidth: '10rem' }}></Column>
-          <Column field="created_at" header="Created" body={dateTemplate} sortable className="hidden md:table-cell" style={{ minWidth: '8rem' }}></Column>
-          <Column field="is_completed" header="Status" body={statusTemplate} sortable style={{ minWidth: '8rem' }}></Column>
-          <Column body={actionTemplate} style={{ width: '9rem' }}></Column>
-        </DataTable>
+        {/* Desktop View */}
+        <div className="hidden md:block">
+          <DataTable 
+            value={tasks} 
+            paginator 
+            rows={10} 
+            rowsPerPageOptions={[5, 10, 25]} 
+            dataKey="id" 
+            rowHover
+            stripedRows
+            globalFilter={globalFilter}
+            emptyMessage={emptyMessage}
+            header={header}
+            className="p-datatable-tasks"
+          >
+            <Column 
+              field="name" 
+              header="Task" 
+              body={taskNameTemplate} 
+              sortable 
+              style={{ width: '35%' }} 
+            />
+            <Column 
+              field="project_id" 
+              header="Project" 
+              body={projectTemplate} 
+              sortable 
+              style={{ width: '20%' }} 
+            />
+            <Column 
+              field="created_at" 
+              header="Created" 
+              body={dateTemplate} 
+              sortable 
+              style={{ width: '15%' }} 
+            />
+            <Column 
+              field="is_completed" 
+              header="Status" 
+              body={statusTemplate} 
+              sortable 
+              style={{ width: '10%' }} 
+            />
+            <Column 
+              body={actionTemplate} 
+              headerStyle={{ width: '20%', textAlign: 'center' }}
+              bodyStyle={{ textAlign: 'right', overflow: 'visible' }}
+            />
+          </DataTable>
+        </div>
+        
+        {/* Mobile View */}
+        <div className="block md:hidden">
+          <DataTable 
+            value={tasks} 
+            paginator 
+            rows={10} 
+            dataKey="id" 
+            rowHover
+            stripedRows
+            globalFilter={globalFilter}
+            emptyMessage={emptyMessage}
+            responsiveLayout="stack"
+            breakpoint="768px"
+          >
+            <Column 
+              field="name" 
+              header="Task" 
+              body={taskNameTemplate} 
+              sortable 
+            />
+            <Column 
+              field="is_completed" 
+              header="Status" 
+              body={statusTemplate} 
+              sortable 
+            />
+            <Column 
+              body={actionTemplate} 
+              headerStyle={{ width: '40%', textAlign: 'center' }}
+              bodyStyle={{ textAlign: 'right', overflow: 'visible' }}
+            />
+          </DataTable>
+        </div>
       </Card>
 
       <Dialog 
@@ -409,6 +486,7 @@ export default function TasksPage() {
         className="p-fluid"
         footer={taskDialogFooter} 
         onHide={hideDialog}
+        style={{ width: '450px' }}
       >
         <div className="field mt-4 mb-4">
           <label htmlFor="name" className="font-medium mb-2 block">Task Name*</label>

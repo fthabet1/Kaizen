@@ -29,7 +29,7 @@ interface Project {
 }
 
 export default function ProjectsPage() {
-  const { user, loading } = useAuth();
+  const { user, loading, isReady } = useAuth();
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
@@ -46,17 +46,17 @@ export default function ProjectsPage() {
 
   // Redirect if not logged in
   useEffect(() => {
-    if (!loading && !user) {
+    if (isReady && !user) {
       router.push('/auth/login');
     }
-  }, [user, loading, router]);
+  }, [user, isReady, router]);
 
   // Fetch projects
   useEffect(() => {
-    if (user) {
+    if (user && isReady) {
       fetchProjects();
     }
-  }, [user]);
+  }, [user, isReady]);
 
   const fetchProjects = async () => {
     try {
@@ -180,6 +180,14 @@ export default function ProjectsPage() {
     );
   };
 
+  const descriptionTemplate = (rowData: Project) => {
+    return (
+      <div className="truncate max-w-xs">
+        {rowData.description || <span className="text-gray-400 italic">No description</span>}
+      </div>
+    );
+  };
+
   const statusTemplate = (rowData: Project) => {
     return (
       <Tag 
@@ -202,25 +210,40 @@ export default function ProjectsPage() {
           className="p-button-rounded p-button-text" 
           tooltip={rowData.is_active ? "Archive" : "Activate"}
           tooltipOptions={{ position: 'left' }}
-          onClick={() => handleToggleActive(rowData.id, rowData.is_active)} 
+          onClick={(e) => {
+            e.stopPropagation(); // Prevent row click
+            handleToggleActive(rowData.id, rowData.is_active);
+          }} 
         />
         <Button 
           icon="pi pi-pencil" 
           className="p-button-rounded p-button-text" 
           tooltip="Edit"
           tooltipOptions={{ position: 'left' }}
-          onClick={() => openEdit(rowData)} 
+          onClick={(e) => {
+            e.stopPropagation(); // Prevent row click
+            openEdit(rowData);
+          }} 
         />
         <Button 
           icon="pi pi-trash" 
           className="p-button-rounded p-button-text p-button-danger" 
           tooltip="Delete"
           tooltipOptions={{ position: 'left' }}
-          onClick={() => confirmDeleteProject(rowData)} 
+          onClick={(e) => {
+            e.stopPropagation(); // Prevent row click
+            confirmDeleteProject(rowData);
+          }} 
         />
       </div>
     );
   };
+
+  const header = (
+    <div className="flex flex-column md:flex-row md:justify-content-between md:align-items-center">
+      <h5 className="m-0">Manage Projects</h5>
+    </div>
+  );
 
   const toolbarStart = () => {
     return (
@@ -257,7 +280,7 @@ export default function ProjectsPage() {
     </>
   );
 
-  if (loading || loadingProjects) {
+  if (loading || (!isReady) || loadingProjects) {
     return (
       <div className="flex justify-content-center align-items-center" style={{ height: '60vh' }}>
         <ProgressSpinner />
@@ -268,28 +291,89 @@ export default function ProjectsPage() {
   return (
     <div className="p-3 md:p-4">
       <Card>
-        <Toolbar start={toolbarStart} end={toolbarEnd} />
+        <Toolbar start={toolbarStart} end={toolbarEnd} className="mb-4" />
         
-        <DataTable 
-          value={projects} 
-          paginator 
-          rows={10} 
-          dataKey="id" 
-          rowHover
-          stripedRows
-          emptyMessage={emptyMessage}
-          className="mt-4"
-          responsiveLayout="stack"
-          breakpoint="768px"
-          rowClassName={() => "cursor-pointer"}
-          onRowClick={(e) => openEdit(e.data as Project)}
-        >
-          <Column field="name" header="Project" body={projectNameTemplate} sortable style={{ minWidth: '14rem' }}></Column>
-          <Column field="description" header="Description" sortable className="hidden md:table-cell" style={{ minWidth: '14rem' }}></Column>
-          <Column field="created_at" header="Created" body={dateTemplate} sortable className="hidden sm:table-cell" style={{ minWidth: '10rem' }}></Column>
-          <Column field="is_active" header="Status" body={statusTemplate} sortable style={{ minWidth: '8rem' }}></Column>
-          <Column body={actionTemplate} style={{ width: '9rem' }}></Column>
-        </DataTable>
+        {/* For desktop view (custom table implementation) */}
+        <div className="hidden md:block">
+          <DataTable 
+            value={projects} 
+            paginator 
+            rows={10} 
+            dataKey="id" 
+            rowHover
+            stripedRows
+            emptyMessage={emptyMessage}
+            className="p-datatable-projects"
+            header={header}
+          >
+            <Column 
+              field="name" 
+              header="Project" 
+              body={projectNameTemplate} 
+              sortable 
+              style={{ width: '25%' }} 
+            />
+            <Column 
+              field="description" 
+              header="Description" 
+              body={descriptionTemplate}
+              sortable 
+              style={{ width: '35%' }} 
+            />
+            <Column 
+              field="created_at" 
+              header="Created" 
+              body={dateTemplate} 
+              sortable 
+              style={{ width: '15%' }} 
+            />
+            <Column 
+              field="is_active" 
+              header="Status" 
+              body={statusTemplate} 
+              sortable 
+              style={{ width: '10%' }} 
+            />
+            <Column 
+              body={actionTemplate} 
+              headerStyle={{ width: '15%', textAlign: 'center' }}
+              bodyStyle={{ textAlign: 'right', overflow: 'visible' }}
+            />
+          </DataTable>
+        </div>
+
+        {/* For mobile view (stack layout) */}
+        <div className="block md:hidden">
+          <DataTable 
+            value={projects} 
+            paginator 
+            rows={10} 
+            dataKey="id" 
+            rowHover
+            stripedRows
+            emptyMessage={emptyMessage}
+            responsiveLayout="stack"
+            breakpoint="768px"
+          >
+            <Column 
+              field="name" 
+              header="Project" 
+              body={projectNameTemplate} 
+              sortable 
+            />
+            <Column 
+              field="is_active" 
+              header="Status" 
+              body={statusTemplate} 
+              sortable 
+            />
+            <Column 
+              body={actionTemplate} 
+              headerStyle={{ width: '25%', textAlign: 'center' }}
+              bodyStyle={{ textAlign: 'right', overflow: 'visible' }}
+            />
+          </DataTable>
+        </div>
       </Card>
 
       <Dialog 
@@ -299,6 +383,7 @@ export default function ProjectsPage() {
         className="p-fluid"
         footer={projectDialogFooter} 
         onHide={hideDialog}
+        style={{ width: '450px' }}
       >
         <div className="field mt-4 mb-4">
           <label htmlFor="name" className="font-medium mb-2 block">Project Name*</label>
@@ -327,7 +412,7 @@ export default function ProjectsPage() {
 
         <div className="field">
           <label className="font-medium mb-2 block">Color</label>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             {colorOptions.map((color) => (
               <button
                 key={color}
