@@ -32,11 +32,12 @@ interface AuthContextType {
     loading: boolean;
     authError: string | null;
     token: string | null;
+    isReady: boolean; // Add this line
     signInWithEmail: (email: string, password: string) => Promise<void>;
     signUpWithEmail: (email: string, password: string, name: string) => Promise<void>;
     signInWithGoogle: () => Promise<void>;  
     logout: () => Promise<void>;
-}
+  }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -45,6 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [loading, setLoading] = useState(true);
     const [authError, setAuthError] = useState<string | null>(null);
     const [token, setToken] = useState<string | null>(null);
+    const [isReady, setIsReady] = useState(false);
     
     // Set up axios interceptor to include the token
     useEffect(() => {
@@ -55,32 +57,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     }, [token]);
 
-    // Firebase auth state changes
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(firebaseAuth, async (firebaseUser) => {
+          try {
             if (firebaseUser) {
-                setUser(firebaseUser);
-                const idToken = await firebaseUser.getIdToken();
-                setToken(idToken);
-                
-                // Register or update user in our backend
-                try {
-                    await registerUserInBackend(firebaseUser, idToken);
-                } catch (error) {
-                    console.error('Error registering user in backend', error);
-                    // Don't set an auth error here as the main authentication did succeed
-                }
+              setUser(firebaseUser);
+              const idToken = await firebaseUser.getIdToken();
+              setToken(idToken);
+              
+              // Register or update user in our backend
+              try {
+                await registerUserInBackend(firebaseUser, idToken);
+              } catch (error) {
+                console.error('Error registering user in backend', error);
+              }
             } else {
-                // User is not authenticated
-                setUser(null);
-                setToken(null);
+              // User is not authenticated
+              setUser(null);
+              setToken(null);
             }
-            
+          } catch (error) {
+            console.error('Auth state change error:', error);
+          } finally {
             setLoading(false);
+            setIsReady(true); // Set ready state when auth is done
+          }
         });
-
+    
         return () => unsubscribe();
-    }, []);
+      }, []);
 
     // Helper function to register user in backend
     const registerUserInBackend = async (firebaseUser: User, idToken: string) => {
@@ -181,11 +186,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         authError,
         token,
+        isReady, // Add this line
         signInWithEmail,
         signUpWithEmail,
         signInWithGoogle,
         logout
-    };
+      };
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

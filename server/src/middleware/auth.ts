@@ -1,4 +1,3 @@
-// server/src/middleware/auth.ts
 import { Request, Response, NextFunction } from 'express';
 import admin from 'firebase-admin';
 import dotenv from 'dotenv';
@@ -28,6 +27,7 @@ declare global {
       user?: {
         userId: string;
         email: string;
+        internalId?: number; // Add internal ID
       };
     }
   }
@@ -57,14 +57,28 @@ export const authMiddleware = async (
 
     // Try Firebase verification
     try {
-      console.log(`Verifying token: ${token.substring(0, 10)}...`);
+      console.log(`Verifying token for path: ${req.path}`);
       const decodedToken = await admin.auth().verifyIdToken(token);
       console.log(`Token verified for user: ${decodedToken.uid}`);
+      
+      // Get internal user ID from database
+      const db = require('../config/db');
+      const userResult = await db.query('SELECT id FROM users WHERE auth_id = $1', [decodedToken.uid]);
+      
+      let internalId;
+      if (userResult.rows.length > 0) {
+        internalId = userResult.rows[0].id;
+        console.log(`Resolved internal user ID: ${internalId}`);
+      } else {
+        console.log(`Warning: No internal user found for auth_id: ${decodedToken.uid}`);
+      }
       
       req.user = {
         userId: decodedToken.uid,
         email: decodedToken.email || '',
+        internalId: internalId
       };
+      
       next();
     } catch (verifyError) {
       console.error('Token verification failed:', verifyError);

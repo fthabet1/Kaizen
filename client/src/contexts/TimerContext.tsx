@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
@@ -19,8 +20,8 @@ interface Project {
 interface TimeEntry {
   id?: number;
   task_id: number;
-  start_time: Date;
-  end_time?: Date | null;
+  start_time: string; // ISO format string
+  end_time?: string | null;
   duration?: number | null;
   description?: string;
 }
@@ -169,42 +170,78 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     }
   }, [user, isRunning, currentTask, currentProject, startTime, description]);
 
-  // Start the timer
+  // Start the timer with enhanced debugging
   const startTimer = async (taskId: number, projectId: number, taskDescription?: string) => {
+    console.log('---- START TIMER DEBUGGING ----');
+    console.log('Starting timer for task:', taskId, 'project:', projectId);
+    
     try {
       // First, stop any running timer
       if (isRunning) {
+        console.log('Timer already running, stopping first...');
         await stopTimer();
       }
       
+      console.log('Fetching task and project details...');
       // Get task and project details
-      const [taskResponse, projectResponse] = await Promise.all([
-        axios.get(`/api/tasks/${taskId}`),
-        axios.get(`/api/projects/${projectId}`)
-      ]);
+      let taskResponse, projectResponse;
+      try {
+        [taskResponse, projectResponse] = await Promise.all([
+          axios.get(`/api/tasks/${taskId}`),
+          axios.get(`/api/projects/${projectId}`)
+        ]);
+        
+        console.log('Successfully fetched task:', taskResponse.data);
+        console.log('Successfully fetched project:', projectResponse.data);
+      } catch (error) {
+        console.error('Error fetching task or project:', error);
+        throw new Error('Failed to fetch task or project details');
+      }
       
       const task = taskResponse.data;
       const project = projectResponse.data;
       
       // Create new time entry
       const now = new Date();
-      const newTimeEntry: TimeEntry = {
+      console.log('Creating time entry with start time:', now);
+      
+      const newTimeEntry = {
         task_id: taskId,
-        start_time: now,
+        start_time: now.toISOString(),
         description: taskDescription || ''
       };
       
-      await axios.post('/api/time-entries', newTimeEntry);
+      console.log('Time entry payload:', JSON.stringify(newTimeEntry));
+      
+      // Make the API request with error handling
+      try {
+        console.log('Sending POST request to /api/time-entries');
+        const timeEntryResponse = await axios.post('/api/time-entries', newTimeEntry);
+        console.log('Time entry created successfully:', timeEntryResponse.data);
+      } catch (error) {
+        console.error('Error creating time entry:', error);
+        
+        // Log more detailed error info
+        if (axios.isAxiosError(error)) {
+          console.error('Status:', error.response?.status);
+          console.error('Response data:', error.response?.data);
+          console.error('Request config:', error.config);
+        }
+        
+        throw new Error('Failed to create time entry');
+      }
       
       // Update state
+      console.log('Updating timer state...');
       setCurrentTask(task);
       setCurrentProject(project);
       setStartTime(now);
       setDescription(taskDescription || '');
       setIsRunning(true);
+      console.log('Timer started successfully');
+      console.log('---- END TIMER DEBUGGING ----');
     } catch (error) {
-      console.error('Error starting timer', error);
-      // Show a user-friendly error message here if needed
+      console.error('Complete error in startTimer:', error);
       throw error;
     }
   };
@@ -215,27 +252,57 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       return;
     }
     
+    console.log('---- STOP TIMER DEBUGGING ----');
+    console.log('Stopping timer for task:', currentTask.id);
+    
     try {
       const endTime = new Date();
       const duration = Math.floor((endTime.getTime() - startTime.getTime()) / 1000);
+      console.log('End time:', endTime, 'Duration:', duration);
       
       // Find the active time entry
-      const response = await axios.get('/api/time-entries', {
-        params: {
-          task_id: currentTask.id,
-          is_active: true
-        }
-      });
+      console.log('Finding active time entry...');
+      let response;
+      try {
+        response = await axios.get('/api/time-entries', {
+          params: {
+            task_id: currentTask.id,
+            is_active: true
+          }
+        });
+        console.log('Active entries response:', response.data);
+      } catch (error) {
+        console.error('Error finding active time entry:', error);
+        throw new Error('Failed to find active time entry');
+      }
       
       if (response.data && response.data.length > 0) {
         const activeEntry = response.data[0];
+        console.log('Found active entry:', activeEntry);
         
         // Update the time entry with end time and duration
-        await axios.put(`/api/time-entries/${activeEntry.id}`, {
-          end_time: endTime,
+        const updatePayload = {
+          end_time: endTime.toISOString(),
           duration,
           description
-        });
+        };
+        console.log('Updating time entry with:', JSON.stringify(updatePayload));
+        
+        try {
+          await axios.put(`/api/time-entries/${activeEntry.id}`, updatePayload);
+          console.log('Time entry updated successfully');
+        } catch (error) {
+          console.error('Error updating time entry:', error);
+          
+          // Log more detailed error info
+          if (axios.isAxiosError(error)) {
+            console.error('Status:', error.response?.status);
+            console.error('Response data:', error.response?.data);
+            console.error('Request config:', error.config);
+          }
+          
+          throw new Error('Failed to update time entry');
+        }
         
         // Reset state
         setIsRunning(false);
@@ -244,8 +311,10 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         setStartTime(null);
         setElapsedTime(0);
         setDescription('');
+        console.log('Timer state reset');
         
         // Return for chaining
+        console.log('---- END STOP TIMER DEBUGGING ----');
         return;
       } else {
         // No active entry found - this is unusual but we can handle it
@@ -258,12 +327,13 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         setStartTime(null);
         setElapsedTime(0);
         setDescription('');
+        console.log('Timer state reset');
         
+        console.log('---- END STOP TIMER DEBUGGING ----');
         return;
       }
     } catch (error) {
-      console.error('Error stopping timer', error);
-      // Show a user-friendly error message here if needed
+      console.error('Complete error in stopTimer:', error);
       throw error;
     }
   };

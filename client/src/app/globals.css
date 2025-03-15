@@ -24,3 +24,28 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.p-card {
+  background-color: var(--card-background);
+  color: var(--card-foreground);
+}
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  --card-background: #ffffff;
+  --card-foreground: #171717;
+  --primary-color: #0EA5E9;
+  --secondary-color: #10B981;
+  --border-color: #e5e7eb;
+}
+
+:root.dark {
+  --background: #121212;
+  --foreground: #ffffff;
+  --card-background: #1e1e1e;
+  --card-foreground: #ffffff;
+  --primary-color: #38bdf8;
+  --secondary-color: #34d399;
+  --border-color: #2d2d2d;
+}

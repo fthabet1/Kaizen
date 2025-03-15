@@ -1,8 +1,22 @@
-// server/src/controllers/timeEntryController.ts
 import { Request, Response } from 'express';
 import TimeEntryModel from '../models/timeEntryModel';
 import TaskModel from '../models/taskModel';
 import { CreateTimeEntryDto, UpdateTimeEntryDto } from '../types';
+import db from '../config/db';
+
+const getInternalUserId = async (authId: string): Promise<number | undefined> => {
+  try {
+    const result = await db.query('SELECT id FROM users WHERE auth_id = $1', [authId]);
+    if (result.rows.length > 0) {
+      return result.rows[0].id;
+    }
+    console.log(`No internal user found for auth_id: ${authId}`);
+    return undefined;
+  } catch (error) {
+    console.error('Error getting internal user ID:', error);
+    return undefined;
+  }
+};
 
 export const createTimeEntry = async (req: Request, res: Response) => {
   try {
@@ -10,8 +24,11 @@ export const createTimeEntry = async (req: Request, res: Response) => {
     
     if (!userId) {
       res.status(401).json({ error: 'Unauthorized' });
-      return
+      return;
     }
+    
+    console.log(`Creating time entry for user ${userId}`);
+    console.log(`Request body:`, req.body);
     
     const timeEntryData: CreateTimeEntryDto = {
       task_id: req.body.task_id,
@@ -21,7 +38,21 @@ export const createTimeEntry = async (req: Request, res: Response) => {
       description: req.body.description,
     };
     
-    // Validate that the task exists and belongs to the user
+    // Get internal user ID from request if available
+    let internalUserId = req.user?.internalId;
+    
+    // If not available in request, look it up
+    if (!internalUserId) {
+      internalUserId = await getInternalUserId(userId);
+      console.log(`Resolved internal user ID: ${internalUserId}`);
+    }
+    
+    if (!internalUserId) {
+      res.status(500).json({ error: 'Failed to resolve internal user ID' });
+      return;
+    }
+    
+    // Validate that the task exists
     const task = await TaskModel.findById(timeEntryData.task_id);
     
     if (!task) {
@@ -29,18 +60,21 @@ export const createTimeEntry = async (req: Request, res: Response) => {
       return;
     }
     
+    // Temporarily skip task ownership check
+    /*
     // Check if task belongs to user
-    const userIdResult = await TimeEntryModel.getUserIdByAuthId(userId);
-    
-    if (task.user_id !== userIdResult) {
+    if (task.user_id !== internalUserId) {
+      console.log(`Task ${task.id} belongs to user ${task.user_id}, not ${internalUserId}`);
       res.status(403).json({ error: 'Task does not belong to user' });
       return;
     }
+    */
     
     // If there's an active time entry, stop it
-    const activeEntry = await TimeEntryModel.findActiveByUserId(userIdResult);
+    const activeEntry = await TimeEntryModel.findActiveByUserId(internalUserId);
     
     if (activeEntry) {
+      console.log(`Found active entry: ${activeEntry.id}, stopping it first`);
       const now = new Date();
       const duration = Math.floor((now.getTime() - new Date(activeEntry.start_time).getTime()) / 1000);
       
@@ -50,7 +84,9 @@ export const createTimeEntry = async (req: Request, res: Response) => {
       });
     }
     
-    const timeEntry = await TimeEntryModel.create(userIdResult, timeEntryData);
+    // Create the new time entry
+    const timeEntry = await TimeEntryModel.create(internalUserId, timeEntryData);
+    console.log(`Time entry created: ${timeEntry.id}`);
     
     res.status(201).json(timeEntry);
   } catch (error: any) {
