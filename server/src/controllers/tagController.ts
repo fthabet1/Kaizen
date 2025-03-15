@@ -1,4 +1,3 @@
-// server/src/controllers/tagController.ts
 import { Request, Response } from 'express';
 import TagModel from '../models/tagModel';
 import { CreateTagDto } from '../types';

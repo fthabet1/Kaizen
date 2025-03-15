@@ -1,4 +1,3 @@
-// server/src/routes/stats.ts
 import express from 'express';
 import { 
   getUserStats, 

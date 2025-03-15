@@ -1,4 +1,3 @@
-// server/src/controllers/taskController.ts
 import { Request, Response } from 'express';
 import TaskModel from '../models/taskModel';
 import ProjectModel from '../models/projectModel';

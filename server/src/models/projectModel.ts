@@ -1,4 +1,3 @@
-// server/src/models/ProjectModel.ts
 import db from '../config/db';
 import { Project, CreateProjectDto, UpdateProjectDto } from '../types';
 

@@ -1,4 +1,3 @@
-// server/src/routes/timeEntries.ts
 import express from 'express';
 import { 
   createTimeEntry, 

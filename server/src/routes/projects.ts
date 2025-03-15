@@ -1,4 +1,3 @@
-// server/src/routes/projects.ts
 import express from 'express';
 import * as projectController from '../controllers/projectController';
 

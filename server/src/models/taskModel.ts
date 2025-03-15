@@ -1,4 +1,3 @@
-// server/src/models/TaskModel.ts
 import db from '../config/db';
 import { Task, CreateTaskDto, UpdateTaskDto } from '../types';
 

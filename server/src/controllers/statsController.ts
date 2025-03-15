@@ -1,4 +1,3 @@
-// server/src/controllers/statsController.ts
 import { Request, Response } from 'express';
 import TimeEntryModel from '../models/timeEntryModel';
 import ProjectModel from '../models/projectModel';

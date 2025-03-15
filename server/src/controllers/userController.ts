@@ -1,4 +1,3 @@
-// server/src/controllers/userController.ts
 import { Request, Response } from 'express';
 import UserModel from '../models/userModel';
 import { CreateUserDto } from '../types';

@@ -1,4 +1,3 @@
-// server/src/models/UserModel.ts
 import db from '../config/db';
 import { User, CreateUserDto } from '../types/index';
 

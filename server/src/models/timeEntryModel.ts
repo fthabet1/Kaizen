@@ -1,4 +1,3 @@
-// server/src/models/TimeEntryModel.ts
 import db from '../config/db';
 import { TimeEntry, CreateTimeEntryDto, UpdateTimeEntryDto } from '../types';
 

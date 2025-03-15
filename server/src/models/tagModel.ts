@@ -1,4 +1,3 @@
-// server/src/models/TagModel.ts
 import db from '../config/db';
 import { Tag, CreateTagDto } from '../types';
 

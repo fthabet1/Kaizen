@@ -1,4 +1,3 @@
-// server/src/routes/tags.ts
 import express from 'express';
 import { 
   createTag, 
