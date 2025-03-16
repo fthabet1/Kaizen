@@ -1,23 +1,25 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContexts';
 import { useRouter } from 'next/navigation';
-import axios from 'axios';
+// IMPORTANT: Use the configured axios instance instead of the default one
+import axios from '../../utils/axiosConfig';
 import Link from 'next/link';
 
 // PrimeReact Components
 import { DataTable } from 'primereact/datatable';
 import { Column } from 'primereact/column';
 import { Button } from 'primereact/button';
-import { Dialog } from 'primereact/dialog';
 import { InputText } from 'primereact/inputtext';
+import { Dialog } from 'primereact/dialog';
 import { InputTextarea } from 'primereact/inputtextarea';
 import { Card } from 'primereact/card';
 import { Tag } from 'primereact/tag';
 import { ProgressSpinner } from 'primereact/progressspinner';
 import { Toolbar } from 'primereact/toolbar';
 import { confirmDialog, ConfirmDialog } from 'primereact/confirmdialog';
+import { Toast } from 'primereact/toast';
 
 interface Project {
   id: number;
@@ -31,6 +33,8 @@ interface Project {
 export default function ProjectsPage() {
   const { user, loading, isReady } = useAuth();
   const router = useRouter();
+  const toast = useRef<Toast>(null);
+
   const [projects, setProjects] = useState<Project[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [projectDialog, setProjectDialog] = useState(false);
@@ -43,6 +47,7 @@ export default function ProjectsPage() {
     is_active: true,
     created_at: new Date().toISOString()
   });
+  const [globalFilter, setGlobalFilter] = useState('');
 
   // Redirect if not logged in
   useEffect(() => {
@@ -61,10 +66,18 @@ export default function ProjectsPage() {
   const fetchProjects = async () => {
     try {
       setLoadingProjects(true);
+      console.log('Fetching projects...');
       const response = await axios.get('/api/projects');
+      console.log('Projects fetched successfully:', response.data);
       setProjects(response.data);
     } catch (error) {
       console.error('Error fetching projects', error);
+      toast.current?.show({ 
+        severity: 'error', 
+        summary: 'Error', 
+        detail: 'Failed to fetch projects', 
+        life: 3000 
+      });
     } finally {
       setLoadingProjects(false);
     }
@@ -83,8 +96,17 @@ export default function ProjectsPage() {
     setProjectDialog(true);
   };
 
-  const openEdit = (project: Project) => {
-    setProject({ ...project });
+  const openEdit = (projectToEdit: Project) => {
+    console.log('Opening edit dialog for project:', projectToEdit);
+    // Create a clean copy to avoid reference issues
+    setProject({ 
+      id: projectToEdit.id,
+      name: projectToEdit.name,
+      description: projectToEdit.description,
+      color: projectToEdit.color,
+      is_active: projectToEdit.is_active,
+      created_at: projectToEdit.created_at
+    });
     setIsNewProject(false);
     setProjectDialog(true);
   };
@@ -95,26 +117,103 @@ export default function ProjectsPage() {
 
   const handleSaveProject = async () => {
     try {
+      if (!project.name.trim()) {
+        toast.current?.show({
+          severity: 'warn',
+          summary: 'Warning',
+          detail: 'Project name is required',
+          life: 3000
+        });
+        return;
+      }
+
       if (isNewProject) {
         // Create new project
+        console.log('Creating new project with data:', {
+          name: project.name,
+          description: project.description,
+          color: project.color
+        });
+        
         const response = await axios.post('/api/projects', {
           name: project.name,
           description: project.description,
           color: project.color
         });
-        setProjects([...projects, response.data]);
+        
+        console.log('Project created successfully, response:', response.data);
+        
+        // Update state
+        setProjects(prevProjects => [...prevProjects, response.data]);
+        
+        toast.current?.show({
+          severity: 'success',
+          summary: 'Success',
+          detail: 'Project created successfully',
+          life: 3000
+        });
       } else {
         // Update existing project
+        console.log('Updating project ID:', project.id, 'with data:', {
+          name: project.name,
+          description: project.description,
+          color: project.color
+        });
+        
         const response = await axios.put(`/api/projects/${project.id}`, {
           name: project.name,
           description: project.description,
           color: project.color
         });
-        setProjects(projects.map(p => (p.id === project.id ? response.data : p)));
+        
+        console.log('Project updated successfully, response:', response.data);
+        
+        // Create a completely new array for React state update
+        const updatedProjects = [...projects];
+        const index = updatedProjects.findIndex(p => p.id === project.id);
+        
+        if (index !== -1) {
+          updatedProjects[index] = response.data;
+          setProjects(updatedProjects);
+          console.log('Updated projects array:', updatedProjects);
+        }
+        
+        toast.current?.show({
+          severity: 'success',
+          summary: 'Success',
+          detail: 'Project updated successfully',
+          life: 3000
+        });
       }
+      
       setProjectDialog(false);
+      
+      // Force refresh projects after a brief delay to ensure server has processed the change
+      setTimeout(() => {
+        console.log('Refreshing projects list after update');
+        fetchProjects();
+      }, 300);
+      
     } catch (error) {
-      console.error('Error saving project', error);
+      console.error('Error saving project:', error);
+      
+      let errorMessage = 'Failed to save project';
+      
+      if (axios.isAxiosError(error) && error.response) {
+        console.error('API error details:', {
+          status: error.response.status,
+          data: error.response.data
+        });
+        
+        errorMessage += `: ${error.response.data?.error || error.message}`;
+      }
+      
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Error',
+        detail: errorMessage,
+        life: 5000
+      });
     }
   };
 
@@ -130,24 +229,67 @@ export default function ProjectsPage() {
 
   const handleDeleteProject = async (id: number) => {
     try {
+      console.log('Deleting project ID:', id);
       await axios.delete(`/api/projects/${id}`);
+      
       setProjects(projects.filter(p => p.id !== id));
+      
+      toast.current?.show({
+        severity: 'success',
+        summary: 'Success',
+        detail: 'Project deleted successfully',
+        life: 3000
+      });
     } catch (error) {
       console.error('Error deleting project', error);
+      
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to delete project',
+        life: 3000
+      });
+      
+      // Refresh projects on error to ensure UI consistency
+      fetchProjects();
     }
   };
 
   const handleToggleActive = async (id: number, isActive: boolean) => {
     try {
+      console.log('Toggling project activity. Project ID:', id, 'Current status:', isActive);
+      
       const response = await axios.put(`/api/projects/${id}`, {
         is_active: !isActive,
       });
       
-      setProjects(
-        projects.map((p) => (p.id === id ? response.data : p))
+      console.log('Toggle activity response:', response.data);
+      
+      // Create a new array with the updated project
+      const updatedProjects = projects.map(p => 
+        p.id === id ? response.data : p
       );
+      
+      setProjects(updatedProjects);
+      
+      toast.current?.show({
+        severity: 'success',
+        summary: 'Success',
+        detail: `Project ${!isActive ? 'activated' : 'archived'} successfully`,
+        life: 3000
+      });
     } catch (error) {
       console.error('Error updating project', error);
+      
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to update project status',
+        life: 3000
+      });
+      
+      // Refresh projects on error to ensure UI consistency
+      fetchProjects();
     }
   };
 
@@ -242,6 +384,14 @@ export default function ProjectsPage() {
   const header = (
     <div className="flex flex-column md:flex-row md:justify-content-between md:align-items-center">
       <h5 className="m-0">Manage Projects</h5>
+      <span className="p-input-icon-left">
+        <i className="pi pi-search" />
+        <InputText 
+          type="search" 
+          onInput={(e) => setGlobalFilter((e.target as HTMLInputElement).value)} 
+          placeholder="Search..." 
+        />
+      </span>
     </div>
   );
 
@@ -262,6 +412,13 @@ export default function ProjectsPage() {
     );
   };
 
+  const projectDialogFooter = (
+    <>
+      <Button label="Cancel" icon="pi pi-times" className="p-button-text" onClick={hideDialog} />
+      <Button label={isNewProject ? "Create" : "Save"} icon="pi pi-check" onClick={handleSaveProject} />
+    </>
+  );
+
   const emptyMessage = () => {
     return (
       <div className="text-center py-5">
@@ -273,13 +430,6 @@ export default function ProjectsPage() {
     );
   };
 
-  const projectDialogFooter = (
-    <>
-      <Button label="Cancel" icon="pi pi-times" className="p-button-text" onClick={hideDialog} />
-      <Button label={isNewProject ? "Create" : "Save"} icon="pi pi-check" onClick={handleSaveProject} />
-    </>
-  );
-
   if (loading || (!isReady) || loadingProjects) {
     return (
       <div className="flex justify-content-center align-items-center" style={{ height: '60vh' }}>
@@ -290,6 +440,7 @@ export default function ProjectsPage() {
 
   return (
     <div className="p-3 md:p-4">
+      <Toast ref={toast} position="top-right" />
       <Card>
         <Toolbar start={toolbarStart} end={toolbarEnd} className="mb-4" />
         
@@ -305,6 +456,7 @@ export default function ProjectsPage() {
             emptyMessage={emptyMessage}
             className="p-datatable-projects"
             header={header}
+            globalFilter={globalFilter}
           >
             <Column 
               field="name" 
@@ -354,6 +506,7 @@ export default function ProjectsPage() {
             emptyMessage={emptyMessage}
             responsiveLayout="stack"
             breakpoint="768px"
+            globalFilter={globalFilter}
           >
             <Column 
               field="name" 

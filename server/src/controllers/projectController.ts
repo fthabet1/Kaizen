@@ -146,9 +146,30 @@ export const updateProject = async (req: Request, res: Response) => {
       return;
     }
     
-    // Verify that the project belongs to the user
-    if (existingProject.user_id.toString() !== userId) {
-      res.status(403).json({ error: 'Forbidden' });
+    // Get internal user ID to compare with project's user_id
+    let internalUserId = req.user?.internalId;
+    
+    // If not available in request, look it up
+    if (!internalUserId) {
+      const userResult = await db.query('SELECT id FROM users WHERE auth_id = $1', [userId]);
+      if (userResult.rows.length > 0) {
+        internalUserId = userResult.rows[0].id;
+      }
+    }
+    
+    // DEBUG: Log the IDs for comparison
+    console.log(`Project owner ID: ${existingProject.user_id} (type: ${typeof existingProject.user_id})`);
+    console.log(`Authenticated user ID: ${internalUserId} (type: ${typeof internalUserId})`);
+    
+    // Compare as numbers to avoid string/number mismatches
+    if (internalUserId && existingProject.user_id !== internalUserId) {
+      res.status(403).json({ 
+        error: 'Forbidden - You do not have permission to update this project',
+        debug: {
+          projectUserId: existingProject.user_id,
+          authenticatedUserId: internalUserId
+        } 
+      });
       return;
     }
     
