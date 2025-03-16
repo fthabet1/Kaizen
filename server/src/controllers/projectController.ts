@@ -3,17 +3,18 @@ import ProjectModel from '../models/projectModel';
 import { CreateProjectDto, UpdateProjectDto } from '../types';
 import db from '../config/db';
 
-const getInternalUserId = async (authId: string): Promise<number | undefined> => {
+// Utility function to get internal user ID from auth ID
+const getInternalUserId = async (authId: string): Promise<number | null> => {
   try {
     const result = await db.query('SELECT id FROM users WHERE auth_id = $1', [authId]);
     if (result.rows.length > 0) {
       return result.rows[0].id;
     }
     console.log(`No internal user found for auth_id: ${authId}`);
-    return undefined;
+    return null;
   } catch (error) {
     console.error('Error getting internal user ID:', error);
-    return undefined;
+    return null;
   }
 };
 
@@ -23,6 +24,13 @@ export const createProject = async (req: Request, res: Response) => {
     
     if (!userId) {
       res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    
+    // Get internal user ID
+    const internalUserId = await getInternalUserId(userId);
+    if (!internalUserId) {
+      res.status(404).json({ error: 'User not found in database' });
       return;
     }
     
@@ -47,6 +55,13 @@ export const getProjects = async (req: Request, res: Response) => {
     
     if (!userId) {
       res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    
+    // Get internal user ID
+    const internalUserId = await getInternalUserId(userId);
+    if (!internalUserId) {
+      res.status(404).json({ error: 'User not found in database' });
       return;
     }
     
@@ -79,21 +94,16 @@ export const getProjectById = async (req: Request, res: Response) => {
       return;
     }
     
-    console.log(`Fetching project ${projectId} for user ${userId}`);
+    console.log(`Fetching project ${projectId} for user with auth_id ${userId}`);
     
-    // Get internal user ID from request if available
-    let internalUserId = req.user?.internalId;
-    
-    // If not available in request, look it up
+    // Get internal user ID
+    const internalUserId = await getInternalUserId(userId);
     if (!internalUserId) {
-      internalUserId = await getInternalUserId(userId);
-      console.log(`Resolved internal user ID: ${internalUserId}`);
-    }
-    
-    if (!internalUserId) {
-      res.status(500).json({ error: 'Failed to resolve internal user ID' });
+      res.status(404).json({ error: 'User not found in database' });
       return;
     }
+    
+    console.log(`Resolved internal user ID: ${internalUserId}`);
     
     const project = await ProjectModel.findById(projectId);
     
@@ -105,16 +115,12 @@ export const getProjectById = async (req: Request, res: Response) => {
     // Log to debug ownership
     console.log(`Project owner ID: ${project.user_id}, User's internal ID: ${internalUserId}`);
     
-    // TEMPORARY FIX: Skip ownership verification for now
-    // This is a security compromise but will help diagnose the issue
-    /*
-    // Verify that the project belongs to the user
+    // Verify that the project belongs to the user - compare numbers to numbers
     if (project.user_id !== internalUserId) {
       console.log(`Forbidden: Project ${projectId} belongs to user ${project.user_id}, not ${internalUserId}`);
-      res.status(403).json({ error: 'Forbidden' });
+      res.status(403).json({ error: 'Forbidden - You do not have permission to access this project' });
       return;
     }
-    */
     
     res.status(200).json(project);
   } catch (error: any) {
@@ -138,6 +144,15 @@ export const updateProject = async (req: Request, res: Response) => {
       return;
     }
     
+    // Get internal user ID
+    const internalUserId = await getInternalUserId(userId);
+    if (!internalUserId) {
+      res.status(404).json({ error: 'User not found in database' });
+      return;
+    }
+    
+    console.log(`Updating project ${projectId} for user with internal ID ${internalUserId}`);
+    
     // Get existing project to verify ownership
     const existingProject = await ProjectModel.findById(projectId);
     
@@ -146,30 +161,10 @@ export const updateProject = async (req: Request, res: Response) => {
       return;
     }
     
-    // Get internal user ID to compare with project's user_id
-    let internalUserId = req.user?.internalId;
-    
-    // If not available in request, look it up
-    if (!internalUserId) {
-      const userResult = await db.query('SELECT id FROM users WHERE auth_id = $1', [userId]);
-      if (userResult.rows.length > 0) {
-        internalUserId = userResult.rows[0].id;
-      }
-    }
-    
-    // DEBUG: Log the IDs for comparison
-    console.log(`Project owner ID: ${existingProject.user_id} (type: ${typeof existingProject.user_id})`);
-    console.log(`Authenticated user ID: ${internalUserId} (type: ${typeof internalUserId})`);
-    
-    // Compare as numbers to avoid string/number mismatches
-    if (internalUserId && existingProject.user_id !== internalUserId) {
-      res.status(403).json({ 
-        error: 'Forbidden - You do not have permission to update this project',
-        debug: {
-          projectUserId: existingProject.user_id,
-          authenticatedUserId: internalUserId
-        } 
-      });
+    // Verify that the project belongs to the user - compare numbers to numbers
+    if (existingProject.user_id !== internalUserId) {
+      console.log(`Forbidden: Project ${projectId} belongs to user ${existingProject.user_id}, not ${internalUserId}`);
+      res.status(403).json({ error: 'Forbidden - You do not have permission to update this project' });
       return;
     }
     
@@ -204,6 +199,13 @@ export const deleteProject = async (req: Request, res: Response) => {
       return;
     }
     
+    // Get internal user ID
+    const internalUserId = await getInternalUserId(userId);
+    if (!internalUserId) {
+      res.status(404).json({ error: 'User not found in database' });
+      return;
+    }
+    
     // Get existing project to verify ownership
     const existingProject = await ProjectModel.findById(projectId);
     
@@ -212,9 +214,10 @@ export const deleteProject = async (req: Request, res: Response) => {
       return;
     }
     
-    // Verify that the project belongs to the user
-    if (existingProject.user_id.toString() !== userId) {
-      res.status(403).json({ error: 'Forbidden' });
+    // Verify that the project belongs to the user - compare numbers to numbers
+    if (existingProject.user_id !== internalUserId) {
+      console.log(`Forbidden: Project ${projectId} belongs to user ${existingProject.user_id}, not ${internalUserId}`);
+      res.status(403).json({ error: 'Forbidden - You do not have permission to delete this project' });
       return;
     }
     
@@ -242,6 +245,13 @@ export const getProjectStats = async (req: Request, res: Response) => {
       return;
     }
     
+    // Get internal user ID
+    const internalUserId = await getInternalUserId(userId);
+    if (!internalUserId) {
+      res.status(404).json({ error: 'User not found in database' });
+      return;
+    }
+    
     // Get existing project to verify ownership
     const existingProject = await ProjectModel.findById(projectId);
     
@@ -250,9 +260,10 @@ export const getProjectStats = async (req: Request, res: Response) => {
       return;
     }
     
-    // Verify that the project belongs to the user
-    if (existingProject.user_id.toString() !== userId) {
-      res.status(403).json({ error: 'Forbidden' });
+    // Verify that the project belongs to the user - compare numbers to numbers
+    if (existingProject.user_id !== internalUserId) {
+      console.log(`Forbidden: Project ${projectId} belongs to user ${existingProject.user_id}, not ${internalUserId}`);
+      res.status(403).json({ error: 'Forbidden - You do not have permission to access this project' });
       return;
     }
     
@@ -268,4 +279,3 @@ export const getProjectStats = async (req: Request, res: Response) => {
     res.status(500).json({ error: error.message || 'Error getting project stats' });
   }
 };
-

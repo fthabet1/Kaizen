@@ -213,7 +213,6 @@ export default function TasksPage() {
     return projects.find((p) => p.id === id);
   };
 
-  // DataTable Templates
   const taskNameTemplate = (rowData: Task) => {
     return (
       <div>
@@ -309,14 +308,15 @@ export default function TasksPage() {
   const header = (
     <div className="flex flex-column md:flex-row md:justify-content-between md:align-items-center">
       <h5 className="m-0">Manage Tasks</h5>
-      <span className="p-input-icon-left">
-        <i className="pi pi-search" />
-        <InputText 
-          type="search" 
-          onInput={(e) => setGlobalFilter((e.target as HTMLInputElement).value)} 
-          placeholder="Search..." 
-        />
-      </span>
+      <div className="p-input-icon-left w-full md:w-auto mt-2 md:mt-0 relative">
+      <InputText
+        type="search"
+        value={globalFilter}
+        onChange={(e) => setGlobalFilter(e.target.value)}
+        placeholder="Search..."
+        className="w-full"
+      />
+      </div>
     </div>
   );
 
