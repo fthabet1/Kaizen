@@ -1,21 +1,28 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContexts';
 import { useRouter } from 'next/navigation';
-import axios from 'axios';
+import axios from '../../utils/axiosConfig';
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  PieChart, Pie, Cell
-} from 'recharts';
-import { format, parseISO, startOfWeek, endOfWeek } from 'date-fns';
+  format, parseISO, startOfWeek, endOfWeek 
+} from 'date-fns';
+import { formatTime } from '../../utils/timeUtils';
 
-// PrimeReact imports
+import DailyActivityGraph from '../../components/dashboard/DailyActivityGraph';
+import RecentActivityTable from '../../components/dashboard/RecentActivityTable';
+
 import { Card } from 'primereact/card';
 import { ProgressSpinner } from 'primereact/progressspinner';
-import { Timeline } from 'primereact/timeline';
+import { Toast } from 'primereact/toast';
+import { 
+  PieChart, Pie, Cell, 
+  ResponsiveContainer, 
+  Tooltip, Legend 
+} from 'recharts';
 
-// Define types for our stats
 interface UserStats {
   totalTrackedTime: number;
   projectStats: ProjectStats[];
@@ -41,99 +48,62 @@ interface WeeklyStats {
   totalTime: number;
 }
 
-interface RecentActivity {
-  id: number;
-  task_name: string;
-  project_name: string;
-  project_color: string;
-  start_time: string;
-  end_time: string;
-  duration: number;
-  description: string;
-}
-
 export default function Dashboard() {
-  const { user, loading } = useAuth();
+  const { user, loading, isReady } = useAuth();
   const router = useRouter();
+  const toast = useRef<Toast>(null);
+  
   const [stats, setStats] = useState<UserStats | null>(null);
-  const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [loadingStats, setLoadingStats] = useState(true);
 
+  // Redirect if not logged in
   useEffect(() => {
-    if (!loading && !user) {
+    if (isReady && !user) {
       router.push('/auth/login');
     }
-  }, [user, loading, router]);
+  }, [user, isReady, router]);
 
   useEffect(() => {
-    if (user) {
-      const fetchStats = async () => {
-        try {
-          setLoadingStats(true);
-          const [statsResponse, activityResponse] = await Promise.all([
-            axios.get('/api/stats'),
-            axios.get('/api/time-entries/recent')
-          ]);
-          
-          setStats(statsResponse.data);
-          setRecentActivity(activityResponse.data);
-        } catch (error) {
-          console.error('Error fetching stats', error);
-        } finally {
-          setLoadingStats(false);
-        }
-      };
-
+    if (user && isReady) {
       fetchStats();
     }
-  }, [user]);
+  }, [user, isReady]);
 
-  // Format time from seconds to readable format
-  const formatTime = (seconds: number) => {
-    if (seconds === 0) return '0h 0m';
-    
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    
-    if (hours > 0) {
-      return `${hours}h ${minutes}m`;
+  const fetchStats = async () => {
+    try {
+      setLoadingStats(true);
+      
+      const response = await axios.get('/api/stats');
+      setStats(response.data);
+    } catch (error) {
+      console.error('Error fetching stats', error);
+      toast.current?.show({ 
+        severity: 'error', 
+        summary: 'Error', 
+        detail: 'Failed to fetch dashboard stats', 
+        life: 3000 
+      });
+    } finally {
+      setLoadingStats(false);
     }
-    return `${minutes}m`;
   };
 
-  // Format date for display
-  const formatDate = (dateString: string, includeTime = false) => {
-    return format(parseISO(dateString), includeTime ? 'MMM d, h:mm a' : 'MMM d, yyyy');
-  };
-  
-  // Get date range for this week
   const thisWeek = {
     start: format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'MMM d'),
     end: format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'MMM d')
   };
 
-  // Timeline custom template
-  const timelineTemplate = (item: RecentActivity) => {
-    return (
-      <div className="card mb-3">
-        <div className="flex justify-content-between align-items-start p-3">
-          <div>
-            <span className="text-xl font-medium block mb-2">{item.task_name}</span>
-            <div className="flex align-items-center mb-2">
-              <div className="border-circle mr-2" style={{ backgroundColor: item.project_color, width: '0.75rem', height: '0.75rem' }}></div>
-              <span className="text-color-secondary">{item.project_name}</span>
-            </div>
-            {item.description && (
-              <p className="text-color-secondary m-0">{item.description}</p>
-            )}
-          </div>
-          <div className="flex flex-column align-items-end">
-            <span className="font-medium mb-1">{formatTime(item.duration)}</span>
-            <span className="text-sm text-color-secondary">{formatDate(item.start_time, true)}</span>
-          </div>
+  const customTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-white p-3 border-round shadow-2">
+          <p className="font-medium mb-2">{payload[0].name}</p>
+          <p>{formatTime(payload[0].value)}</p>
+          <p className="text-color-secondary">{`${payload[0].payload.percentage.toFixed(1)}%`}</p>
         </div>
-      </div>
-    );
+      );
+    }
+    return null;
   };
 
   if (loading || loadingStats) {
@@ -146,9 +116,10 @@ export default function Dashboard() {
 
   return (
     <div className="p-4">
+      <Toast ref={toast} />
+      
       <h1 className="text-2xl font-bold mb-4">Dashboard</h1>
 
-      {/* Overview Stats */}
       <div className="grid mb-4">
         <div className="col-12 md:col-4 p-2">
           <Card className="shadow-2 h-full">
@@ -186,56 +157,13 @@ export default function Dashboard() {
       {/* Charts Section */}
       <div className="grid mb-4">
         {/* Daily Activity Chart */}
-        <div className="col-12 lg:col-6 p-2">
-          <Card title="Daily Activity" className="shadow-2 h-full">
-            <div className="h-20rem">
-            {stats && stats.dailyStats && stats.dailyStats.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={stats.dailyStats.slice(-7)} // Only show last 7 days
-                  margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="date" 
-                    tickFormatter={(date) => {
-                      try {
-                        return format(parseISO(date), 'MMM d');
-                      } catch (e) {
-                        console.error("Date parsing error:", e, date);
-                        return date;
-                      }
-                    }}
-                  />
-                  <YAxis 
-                    tickFormatter={(seconds) => `${Math.floor(seconds / 3600)}h`}
-                  />
-                  <Tooltip 
-                    formatter={(value: number) => [formatTime(value), 'Time']}
-                    labelFormatter={(date) => {
-                      try {
-                        return format(parseISO(date as string), 'MMMM d, yyyy');
-                      } catch (e) {
-                        console.error("Tooltip date parsing error:", e, date);
-                        return date;
-                      }
-                    }}
-                  />
-                  <Bar dataKey="totalTime" fill="var(--primary-color)" />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex align-items-center justify-content-center h-full text-color-secondary">
-                No daily activity data available
-              </div>
-            )}
-            </div>
-          </Card>
+        <div className="col-12 lg:col-6">
+          <DailyActivityGraph />
         </div>
 
         {/* Project Distribution Chart */}
-        <div className="col-12 lg:col-6 p-2">
-          <Card title="Project Distribution" className="shadow-2 h-full">
+        <div className="col-12 lg:col-6">
+          <Card title="Project Distribution" className="h-full">
             <div className="h-20rem">
               {stats && stats.projectStats && stats.projectStats.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
@@ -254,9 +182,7 @@ export default function Dashboard() {
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip 
-                      formatter={(value: number) => [formatTime(value), 'Time']}
-                    />
+                    <Tooltip content={customTooltip} />
                     <Legend />
                   </PieChart>
                 </ResponsiveContainer>
@@ -272,20 +198,10 @@ export default function Dashboard() {
 
       {/* Recent Activity */}
       <div className="p-2">
-        <Card title="Recent Activity" className="shadow-2">
-          {recentActivity && recentActivity.length > 0 ? (
-            <Timeline 
-              value={recentActivity} 
-              content={timelineTemplate}
-              className="customized-timeline"
-            />
-          ) : (
-            <div className="p-4 text-center text-color-secondary">
-              No recent activity found. Start tracking to see your activity here.
-            </div>
-          )}
-        </Card>
+        <h2 className="text-xl font-bold mb-3">Recent Activity</h2>
+        <RecentActivityTable />
       </div>
+
     </div>
   );
 }
