@@ -146,9 +146,11 @@ export default function Header() {
             </div>
             
             <div className="col-4 flex justify-content-center">
-              <Link href="/" className="no-underline">
-                <span className="text-2xl font-bold text-white">KAIZEN</span>
-              </Link>
+              {user && !loading && (
+                <Link href="/dashboard" className="no-underline">
+                  <span className="text-2xl font-bold text-white">KAIZEN</span>
+                </Link>
+              )}
             </div>
           
           <div className="col-4 flex justify-content-end">
