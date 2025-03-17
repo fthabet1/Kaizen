@@ -189,32 +189,46 @@ export default function Dashboard() {
         <div className="col-12 lg:col-6 p-2">
           <Card title="Daily Activity" className="shadow-2 h-full">
             <div className="h-20rem">
-              {stats && stats.dailyStats && stats.dailyStats.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={stats.dailyStats.slice(-7)}
-                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis 
-                      dataKey="date" 
-                      tickFormatter={(date) => format(parseISO(date), 'MMM d')}
-                    />
-                    <YAxis 
-                      tickFormatter={(seconds) => `${Math.floor(seconds / 3600)}h`}
-                    />
-                    <Tooltip 
-                      formatter={(value: number) => [formatTime(value), 'Time']}
-                      labelFormatter={(date) => format(parseISO(date as string), 'MMMM d, yyyy')}
-                    />
-                    <Bar dataKey="totalTime" fill="var(--primary-color)" />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex align-items-center justify-content-center h-full text-color-secondary">
-                  No daily activity data available
-                </div>
-              )}
+            {stats && stats.dailyStats && stats.dailyStats.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={stats.dailyStats.slice(-7)} // Only show last 7 days
+                  margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis 
+                    dataKey="date" 
+                    tickFormatter={(date) => {
+                      try {
+                        return format(parseISO(date), 'MMM d');
+                      } catch (e) {
+                        console.error("Date parsing error:", e, date);
+                        return date;
+                      }
+                    }}
+                  />
+                  <YAxis 
+                    tickFormatter={(seconds) => `${Math.floor(seconds / 3600)}h`}
+                  />
+                  <Tooltip 
+                    formatter={(value: number) => [formatTime(value), 'Time']}
+                    labelFormatter={(date) => {
+                      try {
+                        return format(parseISO(date as string), 'MMMM d, yyyy');
+                      } catch (e) {
+                        console.error("Tooltip date parsing error:", e, date);
+                        return date;
+                      }
+                    }}
+                  />
+                  <Bar dataKey="totalTime" fill="var(--primary-color)" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex align-items-center justify-content-center h-full text-color-secondary">
+                No daily activity data available
+              </div>
+            )}
             </div>
           </Card>
         </div>

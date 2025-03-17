@@ -1,10 +1,12 @@
+/* eslint-disable react-hooks/exhaustive-deps */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContexts';
 import { useTimer } from '../../contexts/TimerContext';
-import { useRouter } from 'next/navigation';
-import axios from 'axios';
+import { useRouter, useSearchParams } from 'next/navigation';
+import axios from '../../utils/axiosConfig';
 import { format, subMinutes, subHours } from 'date-fns';
 
 // PrimeReact imports
@@ -16,6 +18,7 @@ import { Toast } from 'primereact/toast';
 import { Calendar } from 'primereact/calendar';
 import { Dialog } from 'primereact/dialog';
 import { InputNumber } from 'primereact/inputnumber';
+import { Dropdown } from 'primereact/dropdown';
 
 interface Project {
   id: number;
@@ -34,8 +37,22 @@ interface Task {
 
 export default function TimerPage() {
   const { user, loading, isReady } = useAuth();
-  const { isRunning, currentTask, currentProject, startTime, elapsedTime, startTimer, stopTimer } = useTimer();
+  const { 
+    isRunning, 
+    currentTask, 
+    currentProject, 
+    startTime, 
+    elapsedTime, 
+    description: currentDescription,
+    startTimer, 
+    stopTimer,
+    discardTimer,
+    setDescription: updateTimerDescription,
+    adjustStartTime,
+  } = useTimer();
+  
   const router = useRouter();
+  const searchParams = useSearchParams();
   const toast = useRef<Toast>(null);
 
   const [projects, setProjects] = useState<Project[]>([]);
@@ -54,10 +71,8 @@ export default function TimerPage() {
   const [hoursToSubtract, setHoursToSubtract] = useState<number>(0);
   const [minutesToSubtract, setMinutesToSubtract] = useState<number>(0);
   
-  // Create a ref to track if we've done the initial data fetch
-  const initialFetchDone = useRef(false);
-  // Keep track of project ID rather than the whole project object
-  const selectedProjectIdRef = useRef<number | null>(null);
+  // Project filtering for task dropdown
+  const [projectFilter, setProjectFilter] = useState<number | null>(null);
 
   // Format time from seconds to readable format (HH:MM:SS)
   const formatTimerDisplay = (seconds: number) => {
@@ -79,83 +94,122 @@ export default function TimerPage() {
     }
   }, [user, isReady, router]);
 
-  // Fetch projects and tasks - only once when component mounts or user changes
+  // Handle query params for initial selection
   useEffect(() => {
-    if (user && isReady && !initialFetchDone.current) {
+    if (searchParams) {
+      const projectId = searchParams.get('projectId');
+      const taskId = searchParams.get('taskId');
+      
+      if (projectId) {
+        setProjectFilter(parseInt(projectId));
+      }
+      
+      // We'll handle taskId after data is loaded
+    }
+  }, [searchParams]);
+
+  // Fetch projects and tasks
+  useEffect(() => {
+    if (user && isReady) {
       fetchProjectsAndTasks();
-      initialFetchDone.current = true;
     }
   }, [user, isReady]);
-  
-  // Separate effect to handle project selection, using the project ID for comparison
-  useEffect(() => {
-    if (selectedProject && selectedProject.id !== selectedProjectIdRef.current) {
-      selectedProjectIdRef.current = selectedProject.id;
-      // Reset task selection when project changes
-      setSelectedTask(null);
-    }
-  }, [selectedProject]);
 
-  // Effect to handle timer state changes
+  // Handle task selection from URL params after data is loaded
   useEffect(() => {
-    if (isRunning && currentTask && startTime) {
-      // If a timer is running, pre-set the adjusted start time
+    if (!loadingData && tasks.length > 0) {
+      const taskId = searchParams.get('taskId');
+      if (taskId) {
+        const taskIdNum = parseInt(taskId);
+        const task = tasks.find(t => t.id === taskIdNum);
+        if (task) {
+          setSelectedTask(task);
+          
+          // Also set the project
+          const project = projects.find(p => p.id === task.project_id);
+          if (project) {
+            setSelectedProject(project);
+            setProjectFilter(project.id);
+          }
+        }
+      }
+    }
+  }, [loadingData, tasks, projects, searchParams]);
+
+  // Check if there is an active timer before rendering the main UI
+  useEffect(() => {
+    // If there's an active timer detected but the UI doesn't show it yet,
+    // force update the state to ensure it's displayed
+    if (isRunning && currentTask && currentProject) {
+      console.log("Active timer detected, ensuring timer view is displayed");
+    }
+  }, [isRunning, currentTask, currentProject]);
+
+  // Set up timer adjustment when timer is running
+  useEffect(() => {
+    if (isRunning && startTime) {
       setAdjustedStartTime(new Date(startTime));
     }
-  }, [isRunning, currentTask, startTime]);
+  }, [isRunning, startTime]);
+
+  // Update task options when project filter changes
+  useEffect(() => {
+    if (projectFilter && selectedTask && selectedTask.project_id !== projectFilter) {
+      // Clear task selection if it doesn't belong to the selected project
+      setSelectedTask(null);
+    }
+  }, [projectFilter, selectedTask]);
 
   const fetchProjectsAndTasks = async () => {
     try {
       setLoadingData(true);
-      const [projectsResponse, tasksResponse] = await Promise.all([
-        axios.get('/api/projects?is_active=true'),
-        axios.get('/api/tasks?is_completed=false')
-      ]);
       
+      // Fetch active projects
+      const projectsResponse = await axios.get('/api/projects?is_active=true');
       setProjects(projectsResponse.data);
+      
+      // Fetch all incomplete tasks
+      const tasksResponse = await axios.get('/api/tasks?is_completed=false');
       setTasks(tasksResponse.data);
+      
+      // If we have a project filter and no selected project yet, set it
+      if (projectFilter && !selectedProject) {
+        const project = projectsResponse.data.find((p: Project) => p.id === projectFilter);
+        if (project) {
+          setSelectedProject(project);
+        }
+      }
     } catch (error) {
       console.error('Error fetching data', error);
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to load projects and tasks',
+        life: 3000
+      });
     } finally {
       setLoadingData(false);
     }
   };
 
-  const handleProjectSelect = (project: Project) => {
-    if (isRunning) {
-      showRunningTimerWarning();
-      return;
-    }
-    setSelectedProject(project);
-    setSelectedTask(null); // Clear task selection when project changes
-  };
-
-  const handleTaskSelect = (task: Task) => {
-    if (isRunning) {
-      showRunningTimerWarning();
-      return;
-    }
-    setSelectedTask(task);
-  };
-
-  const showRunningTimerWarning = () => {
-    toast.current?.show({
-      severity: 'warn',
-      summary: 'Timer Already Running',
-      detail: 'You must stop the current timer before selecting a different task.',
-      life: 3000
-    });
-  };
-
-  const filteredTasks = selectedProject 
-    ? tasks.filter(task => task.project_id === selectedProject.id)
-    : [];
-
   const handleStartTimer = async () => {
-    if (!selectedTask) return;
+    if (!selectedTask) {
+      toast.current?.show({
+        severity: 'warn',
+        summary: 'Select a Task',
+        detail: 'Please select a task before starting the timer',
+        life: 3000
+      });
+      return;
+    }
     
     if (isRunning) {
-      showRunningTimerWarning();
+      toast.current?.show({
+        severity: 'warn',
+        summary: 'Timer Already Running',
+        detail: 'You must stop the current timer before starting a new one',
+        life: 3000
+      });
       return;
     }
     
@@ -199,19 +253,54 @@ export default function TimerPage() {
     }
   };
 
+  const handleDiscardTimer = async () => {
+    if (confirm('Are you sure you want to discard this timer? This action cannot be undone.')) {
+      try {
+        discardTimer();
+        toast.current?.show({
+          severity: 'info',
+          summary: 'Timer Discarded',
+          detail: 'Your timer has been discarded',
+          life: 3000
+        });
+      } catch (error) {
+        console.error('Error discarding timer', error);
+        toast.current?.show({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Failed to discard the timer',
+          life: 3000
+        });
+      }
+    }
+  };
+
   const handleCreateTask = async () => {
-    if (!selectedProject || !newTaskName.trim()) return;
+    if (!projectFilter || !newTaskName.trim()) {
+      toast.current?.show({
+        severity: 'warn',
+        summary: 'Missing Information',
+        detail: 'Please select a project and enter a task name',
+        life: 3000
+      });
+      return;
+    }
     
     if (isRunning) {
-      showRunningTimerWarning();
+      toast.current?.show({
+        severity: 'warn',
+        summary: 'Timer Already Running',
+        detail: 'You must stop the current timer before creating a new task',
+        life: 3000
+      });
       return;
     }
     
     try {
       const response = await axios.post('/api/tasks', {
-        project_id: selectedProject.id,
-        name: newTaskName,
-        description: newTaskDescription
+        project_id: projectFilter,
+        name: newTaskName.trim(),
+        description: newTaskDescription.trim() || undefined
       });
       
       setTasks([...tasks, response.data]);
@@ -288,19 +377,17 @@ export default function TimerPage() {
     }
     
     try {
-      // Update the time entry with the new start time
-      // Note: This would require an API endpoint to adjust the start time
-      // For now, we'll simulate this behavior
+      // Use the TimerContext's adjustStartTime method
+      await adjustStartTime(adjustedStartTime);
+      
       toast.current?.show({
         severity: 'success',
         summary: 'Start Time Adjusted',
         detail: 'Timer start time has been updated',
         life: 3000
       });
-      setShowAdjustStartDialog(false);
       
-      // This would normally require restarting the timer with the adjusted time
-      // You may need to add this functionality to your TimerContext
+      setShowAdjustStartDialog(false);
     } catch (error) {
       console.error('Error adjusting start time', error);
       toast.current?.show({
@@ -319,9 +406,19 @@ export default function TimerPage() {
     </>
   );
 
+  const handleUpdateTimerDescription = (newDescription: string) => {
+    updateTimerDescription(newDescription);
+    toast.current?.show({
+      severity: 'success',
+      summary: 'Description Updated',
+      detail: 'Timer description has been updated',
+      life: 2000
+    });
+  };
+
   if (loading || !isReady || loadingData) {
     return (
-      <div className="flex justify-content-center align-items-center h-screen">
+      <div className="flex justify-content-center align-items-center" style={{ height: '60vh' }}>
         <ProgressSpinner />
       </div>
     );
@@ -356,10 +453,20 @@ export default function TimerPage() {
                   </div>
                   <div className="text-xl font-bold">{currentTask.name}</div>
                 </div>
+
+                <div className="mb-4">
+                  <InputTextarea 
+                    value={currentDescription} 
+                    onChange={(e) => handleUpdateTimerDescription(e.target.value)}
+                    placeholder="Add a description..."
+                    rows={3}
+                    className="w-full"
+                  />
+                </div>
               </div>
               
               <div className="grid">
-                <div className="col-12 md:col-6 p-2">
+                <div className="col-12 md:col-4 p-2">
                   <Button
                     label="Stop Timer"
                     icon="pi pi-stop-circle"
@@ -367,12 +474,20 @@ export default function TimerPage() {
                     onClick={handleStopTimer}
                   />
                 </div>
-                <div className="col-12 md:col-6 p-2">
+                <div className="col-12 md:col-4 p-2">
                   <Button
                     label="Adjust Start Time"
                     icon="pi pi-clock"
                     className="p-button-outlined w-full p-3"
                     onClick={openAdjustStartTimeDialog}
+                  />
+                </div>
+                <div className="col-12 md:col-4 p-2">
+                  <Button
+                    label="Discard Timer"
+                    icon="pi pi-trash"
+                    className="p-button-outlined p-button-secondary w-full p-3"
+                    onClick={handleDiscardTimer}
                   />
                 </div>
               </div>
@@ -465,198 +580,315 @@ export default function TimerPage() {
     );
   }
 
-  // Regular view for when no timer is running
+
+
+  // Regular view for when no timer is running (simplified with just Quick Start UI)
   return (
     <>
       <Toast ref={toast} position="top-right" />
       <div className="p-4">
-        <div className="grid">
-          <div className="col-12">
-            <h1 className="text-2xl font-bold mb-4">Time Tracker</h1>
-          </div>
-
-          <div className="col-12 md:col-4 mb-4">
-            <Card title="Projects" className="h-full">
-              {projects.length > 0 ? (
-                <div className="overflow-y-auto" style={{ maxHeight: '400px' }}>
-                  {projects.map((project) => (
-                    <div
-                      key={project.id}
-                      className={`p-3 mb-2 border-round cursor-pointer transition-colors transition-duration-150 ${
-                        selectedProject?.id === project.id
-                          ? 'bg-primary'
-                          : 'hover:surface-100'
-                      }`}
-                      onClick={() => handleProjectSelect(project)}
-                    >
-                      <div className="flex align-items-center">
-                        <div
-                          className="border-circle mr-2 flex-shrink-0"
-                          style={{ backgroundColor: project.color, width: '1rem', height: '1rem' }}
-                        />
-                        <span className="font-medium">{project.name}</span>
-                      </div>
-                    </div>
-                  ))}
+        <h1 className="text-2xl font-bold mb-4">Time Tracker</h1>
+        
+        {isRunning && currentTask && currentProject ? (
+          // If there's an active timer, show the running timer UI instead of the start timer UI
+          <Card className="w-full mb-4">
+            <div className="text-center mb-6">
+              <h1 className="text-3xl font-bold mb-2">Timer Running</h1>
+              <p className="text-color-secondary mb-4">Your time is being tracked</p>
+                
+              <div className="timer-display bg-gray-100 dark:bg-gray-800 p-5 border-round mb-4">
+                <div className="text-5xl font-bold mb-3 text-primary">{formatTimerDisplay(elapsedTime)}</div>
+                <div className="text-lg">
+                  Started at: {startTime ? format(new Date(startTime), 'h:mm a, MMMM d, yyyy') : ''}
                 </div>
-              ) : (
-                <div className="text-center py-5">
-                  <i className="pi pi-folder-open text-4xl text-gray-400 mb-3" />
-                  <div className="text-lg font-medium mb-2">No Projects</div>
-                  <p className="mb-4">Create a project to start tracking time</p>
-                  <Button
-                    label="Create Project"
-                    icon="pi pi-plus"
-                    onClick={() => router.push('/projects')}
-                    className="p-button-outlined"
-                  />
-                </div>
-              )}
-            </Card>
-          </div>
-
-          <div className="col-12 md:col-4 mb-4">
-            <Card 
-              title="Tasks" 
-              className="h-full"
-              subTitle={selectedProject ? selectedProject.name : 'Select a project'}
-            >
-              {selectedProject && (
-                <div className="flex justify-content-end mb-3">
-                  <Button
-                    icon="pi pi-plus"
-                    className="p-button-rounded p-button-text"
-                    onClick={() => setShowCreateTask(true)}
-                    tooltip="Add Task"
-                  />
-                </div>
-              )}
-              {selectedProject ? (
-                showCreateTask ? (
-                  <div className="p-fluid">
-                    <div className="field">
-                      <label htmlFor="task-name" className="font-medium mb-2 block">Task Name</label>
-                      <InputTextarea
-                        id="task-name"
-                        value={newTaskName}
-                        onChange={(e) => setNewTaskName(e.target.value)}
-                        rows={1}
-                        autoResize
-                        className="w-full"
-                        placeholder="What are you working on?"
-                      />
-                    </div>
-                    <div className="field">
-                      <label htmlFor="task-description" className="font-medium mb-2 block">Description (optional)</label>
-                      <InputTextarea
-                        id="task-description"
-                        value={newTaskDescription}
-                        onChange={(e) => setNewTaskDescription(e.target.value)}
-                        rows={3}
-                        autoResize
-                        className="w-full"
-                      />
-                    </div>
-                    <div className="flex justify-content-end gap-2 mt-4">
-                      <Button
-                        label="Cancel"
-                        icon="pi pi-times"
-                        className="p-button-outlined p-button-secondary"
-                        onClick={() => setShowCreateTask(false)}
-                      />
-                      <Button
-                        label="Create Task"
-                        icon="pi pi-check"
-                        onClick={handleCreateTask}
-                        disabled={!newTaskName.trim()}
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  <div className="overflow-y-auto" style={{ maxHeight: '400px' }}>
-                    {filteredTasks.length > 0 ? (
-                      filteredTasks.map((task) => (
-                        <div
-                          key={task.id}
-                          className={`p-3 mb-2 border-round cursor-pointer transition-colors transition-duration-150 ${
-                            selectedTask?.id === task.id
-                              ? 'bg-primary'
-                              : 'hover:surface-100'
-                          }`}
-                          onClick={() => handleTaskSelect(task)}
-                        >
-                          <div className="font-medium">{task.name}</div>
-                          {task.description && (
-                            <div className="text-sm text-color-secondary mt-1">{task.description}</div>
-                          )}
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-center py-5 text-color-secondary">
-                        <i className="pi pi-check-square text-4xl mb-3" />
-                        <div>No tasks in this project</div>
-                        <Button
-                          label="Add Task"
-                          icon="pi pi-plus"
-                          className="p-button-text mt-3"
-                          onClick={() => setShowCreateTask(true)}
-                        />
-                      </div>
-                    )}
-                  </div>
-                )
-              ) : (
-                <div className="text-center py-5 text-color-secondary">
-                  <i className="pi pi-arrow-left text-4xl mb-3" />
-                  <div>Select a project first</div>
-                </div>
-              )}
-            </Card>
-          </div>
-
-          <div className="col-12 md:col-4 mb-4">
-            <Card title="Timer" className="h-full">
-              <div className="p-fluid">
-                {selectedTask ? (
-                  <>
-                    <div className="mb-4">
-                      <div className="text-lg font-bold mb-2">Selected Task</div>
-                      <div className="p-3 bg-gray-100 dark:bg-gray-900 border-round">
-                        <div className="font-medium">{selectedTask.name}</div>
-                        {selectedTask.description && (
-                          <div className="text-sm text-color-secondary mt-1">{selectedTask.description}</div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="field mb-4">
-                      <label htmlFor="description" className="font-medium mb-2 block">Description (optional)</label>
-                      <InputTextarea
-                        id="description"
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
-                        rows={3}
-                        autoResize
-                        className="w-full"
-                        placeholder="What are you working on?"
-                      />
-                    </div>
-                    <Button
-                      label="Start Timer"
-                      icon="pi pi-play"
-                      className="p-button-success w-full p-3 text-xl"
-                      onClick={handleStartTimer}
-                    />
-                  </>
-                ) : (
-                  <div className="text-center py-5 text-color-secondary">
-                    <i className="pi pi-arrow-left text-4xl mb-3" />
-                    <div>Select a task to start tracking</div>
-                  </div>
-                )}
               </div>
-            </Card>
+                
+              <div className="task-info border-1 border-primary p-4 border-round mb-4">
+                <div className="flex align-items-center justify-content-center mb-2">
+                  <div 
+                    className="border-circle mr-2 flex-shrink-0"
+                    style={{ backgroundColor: currentProject.color, width: '1rem', height: '1rem' }}
+                  />
+                  <span className="font-medium text-lg">{currentProject.name}</span>
+                </div>
+                <div className="text-xl font-bold">{currentTask.name}</div>
+              </div>
+
+              <div className="mb-4">
+                <InputTextarea 
+                  value={currentDescription} 
+                  onChange={(e) => handleUpdateTimerDescription(e.target.value)}
+                  placeholder="Add a description..."
+                  rows={3}
+                  className="w-full"
+                />
+              </div>
+            </div>
+              
+            <div className="grid">
+              <div className="col-12 md:col-4 p-2">
+                <Button
+                  label="Stop Timer"
+                  icon="pi pi-stop-circle"
+                  className="p-button-danger w-full p-3"
+                  onClick={handleStopTimer}
+                />
+              </div>
+              <div className="col-12 md:col-4 p-2">
+                <Button
+                  label="Adjust Start Time"
+                  icon="pi pi-clock"
+                  className="p-button-outlined w-full p-3"
+                  onClick={openAdjustStartTimeDialog}
+                />
+              </div>
+              <div className="col-12 md:col-4 p-2">
+                <Button
+                  label="Discard Timer"
+                  icon="pi pi-trash"
+                  className="p-button-outlined p-button-secondary w-full p-3"
+                  onClick={handleDiscardTimer}
+                />
+              </div>
+            </div>
+          </Card>
+        ) : (
+          // No active timer, show the start timer UI
+          <Card className="mb-4">
+            <div className="grid">
+              <div className="col-12 mb-4">
+                <h2 className="text-xl font-semibold">Start a Timer</h2>
+                <p className="text-color-secondary mt-1">Select a project and task to track your time</p>
+              </div>
+              
+              <div className="col-12 md:col-6 lg:col-4 mb-3">
+                <label className="block font-medium mb-2">Project</label>
+                <Dropdown
+                  value={projectFilter}
+                  options={[
+                    ...projects.map(p => ({ label: p.name, value: p.id }))
+                  ]}
+                  onChange={(e) => {
+                    setProjectFilter(e.value);
+                    // Clear task if project filter changes
+                    setSelectedTask(null);
+                    // Set selected project if it's a valid project
+                    if (e.value) {
+                      const project = projects.find(p => p.id === e.value);
+                      if (project) {
+                        setSelectedProject(project);
+                      }
+                    } else {
+                      setSelectedProject(null);
+                    }
+                  }}
+                  placeholder="Select Project"
+                  className="w-full"
+                  filter
+                  emptyFilterMessage="No projects found"
+                  emptyMessage={
+                    <div className="p-2 text-center">
+                      <div>No projects available</div>
+                      <Button 
+                        label="Create Project" 
+                        className="p-button-text p-button-sm mt-2"
+                        onClick={() => router.push('/projects')}
+                      />
+                    </div>
+                  }
+                />
+              </div>
+              
+              <div className="col-12 md:col-6 lg:col-4 mb-3">
+                <label className="block font-medium mb-2">Task</label>
+                <Dropdown
+                  value={selectedTask?.id}
+                  options={[
+                    ...tasks
+                      .filter(t => !projectFilter || t.project_id === projectFilter)
+                      .map(t => ({ label: t.name, value: t.id }))
+                  ]}
+                  onChange={(e) => {
+                    const task = tasks.find(t => t.id === e.value);
+                    if (task) {
+                      setSelectedTask(task);
+                      // Also set the project if task is selected
+                      const project = projects.find(p => p.id === task.project_id);
+                      if (project) {
+                        setSelectedProject(project);
+                        setProjectFilter(project.id);
+                      }
+                    }
+                  }}
+                  placeholder="Select Task"
+                  className="w-full"
+                  filter
+                  disabled={!projectFilter}
+                  emptyFilterMessage="No matching tasks found"
+                  emptyMessage={
+                    <div className="p-2 text-center">
+                      <div>No tasks available</div>
+                      <Button 
+                        label="Create Task" 
+                        className="p-button-text p-button-sm mt-2"
+                        onClick={() => setShowCreateTask(true)}
+                        disabled={!projectFilter}
+                      />
+                    </div>
+                  }
+                />
+              </div>
+              
+              <div className="col-12 lg:col-4 mb-3">
+                <label className="block font-medium mb-2">Description (optional)</label>
+                <InputTextarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={1}
+                  placeholder="What are you working on?"
+                  className="w-full"
+                  autoResize
+                />
+              </div>
+              
+              <div className="col-12 mt-2">
+                <Button
+                  label="Start Timer"
+                  icon="pi pi-play"
+                  className="p-button-success"
+                  disabled={!selectedTask}
+                  onClick={handleStartTimer}
+                />
+              </div>
+            </div>
+          </Card>
+        )}
+        
+        {/* Create Task Dialog */}
+        <Dialog 
+          header="Create New Task" 
+          visible={showCreateTask} 
+          style={{ width: '450px' }} 
+          modal
+          onHide={() => setShowCreateTask(false)}
+          footer={
+            <>
+              <Button label="Cancel" icon="pi pi-times" className="p-button-text" onClick={() => setShowCreateTask(false)} />
+              <Button label="Create" icon="pi pi-check" onClick={handleCreateTask} disabled={!newTaskName.trim()} />
+            </>
+          }
+        >
+          <div className="p-fluid">
+            <div className="field mb-4">
+              <label htmlFor="project-select" className="font-medium mb-2 block">Project</label>
+              <Dropdown
+                id="project-select"
+                value={projectFilter}
+                options={projects.map(p => ({ label: p.name, value: p.id }))}
+                onChange={(e) => setProjectFilter(e.value)}
+                placeholder="Select Project"
+                className="w-full"
+                required
+              />
+            </div>
+            
+            <div className="field mb-4">
+              <label htmlFor="task-name" className="font-medium mb-2 block">Task Name</label>
+              <InputTextarea
+                id="task-name"
+                value={newTaskName}
+                onChange={(e) => setNewTaskName(e.target.value)}
+                rows={1}
+                autoResize
+                className="w-full"
+                placeholder="What is this task about?"
+                required
+              />
+            </div>
+            
+            <div className="field">
+              <label htmlFor="task-description" className="font-medium mb-2 block">Description (optional)</label>
+              <InputTextarea
+                id="task-description"
+                value={newTaskDescription}
+                onChange={(e) => setNewTaskDescription(e.target.value)}
+                rows={3}
+                autoResize
+                className="w-full"
+                placeholder="Add more details about this task"
+              />
+            </div>
           </div>
-        </div>
+        </Dialog>
+        
+        {/* Only show recent tasks when no timer is running */}
+        {!isRunning && (
+          <Card title="Recent Tasks">
+            <div className="grid">
+              {tasks.slice(0, 4).map(task => {
+                const project = projects.find(p => p.id === task.project_id);
+                return (
+                  <div key={task.id} className="col-12 md:col-6 lg:col-3 p-2">
+                    <div 
+                      className="p-3 border-round cursor-pointer hover:surface-100 transition-colors transition-duration-150"
+                      onClick={() => {
+                        setSelectedTask(task);
+                        setProjectFilter(task.project_id);
+                        const project = projects.find(p => p.id === task.project_id);
+                        if (project) {
+                          setSelectedProject(project);
+                        }
+                      }}
+                    >
+                      <div className="flex align-items-center mb-2">
+                        <div 
+                          className="border-circle mr-2 flex-shrink-0"
+                          style={{ 
+                            backgroundColor: project?.color || '#ccc', 
+                            width: '0.75rem', 
+                            height: '0.75rem' 
+                          }}
+                        />
+                        <span className="text-sm text-color-secondary">{project?.name}</span>
+                      </div>
+                      <div className="font-medium">{task.name}</div>
+                      <div className="flex justify-content-end mt-2">
+                        <Button
+                          icon="pi pi-play"
+                          className="p-button-rounded p-button-text p-button-sm p-button-success"
+                          tooltip="Start timer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedTask(task);
+                            setProjectFilter(task.project_id);
+                            if (project) {
+                              setSelectedProject(project);
+                            }
+                            handleStartTimer();
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            
+            {tasks.length === 0 && (
+              <div className="text-center py-5 text-color-secondary">
+                <i className="pi pi-check-square text-4xl mb-3" />
+                <div>No tasks available. Create a task to get started.</div>
+                <Button
+                  label="Create Task"
+                  icon="pi pi-plus"
+                  className="p-button-text mt-3"
+                  onClick={() => setShowCreateTask(true)}
+                  disabled={!projectFilter}
+                />
+              </div>
+            )}
+          </Card>
+        )}
       </div>
     </>
   );

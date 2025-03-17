@@ -6,14 +6,11 @@ import { TimerProvider } from '../contexts/TimerContext';
 import Header from '../components/ui/Header';
 import TimerBar from '../components/timer/TimerBar';
 
-
-
 export default function ClientLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  // We need to handle Auth0 client-side only
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
@@ -23,19 +20,17 @@ export default function ClientLayout({
   return (
     <>
       {isMounted ? (
-          <AuthProvider>
-            <TimerProvider>
-              <div className="min-h-screen bg-gray-50 flex">
-                <div className="flex flex-col flex-1">
-                  <Header />
-                  <main className="flex-1 p-6 overflow-y-auto">
-                    {children}
-                  </main>
-                  <TimerBar />
-                </div>
-              </div>
-            </TimerProvider>
-          </AuthProvider>
+        <AuthProvider>
+          <TimerProvider>
+            <div className="min-h-screen bg-gray-50 flex flex-col">
+              <Header />
+              <main className="flex-1 p-6 overflow-y-auto mb-16"> {/* Add margin-bottom to ensure content isn't hidden by timer bar */}
+                {children}
+              </main>
+              <TimerBar />
+            </div>
+          </TimerProvider>
+        </AuthProvider>
       ) : null}
     </>
   );
