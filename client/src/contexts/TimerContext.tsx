@@ -39,6 +39,7 @@ interface TimerContextType {
   discardTimer: () => void;
   setDescription: (description: string) => void;
   adjustStartTime: (newStartTime: Date) => Promise<void>;
+  deleteTimeEntry: (entryId: number) => Promise<boolean>;
 }
 
 const TimerContext = createContext<TimerContextType | undefined>(undefined);
@@ -53,6 +54,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   const [timerInterval, setTimerInterval] = useState<NodeJS.Timeout | null>(null);
   const [activeTimeEntryId, setActiveTimeEntryId] = useState<number | null>(null);
   const { user } = useAuth();
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // Load active timer from API on init
   useEffect(() => {
@@ -100,13 +102,15 @@ export function TimerProvider({ children }: { children: ReactNode }) {
           } else {
             console.log('No active timer found in database, checking localStorage...');
             // No active timer, check localStorage for backup
-            loadFromLocalStorage();
+            await loadFromLocalStorage();
           }
         } catch (error) {
           console.error('Error checking active timer:', error);
           // Fallback to localStorage
           console.log('Error fetching active timer, falling back to localStorage');
-          loadFromLocalStorage();
+          await loadFromLocalStorage();
+        } finally {
+          setIsInitialized(true);
         }
       };
       
@@ -114,8 +118,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     }
   }, [user]);
 
-  // Load from localStorage as a fallback
-  const loadFromLocalStorage = () => {
+  const loadFromLocalStorage = async () => {
     if (!user || !user.uid) return;
     
     const savedTimer = localStorage.getItem(`timer_${user.uid}`);
@@ -143,13 +146,15 @@ export function TimerProvider({ children }: { children: ReactNode }) {
             setActiveTimeEntryId(timeEntryId);
             
             // Verify that this timer entry still exists and is active
-            verifyActiveTimeEntry(timeEntryId);
+            await verifyActiveTimeEntry(timeEntryId);
           } else {
             // No time entry ID found, we need to create a new one
-            console.log('No time entry ID in localStorage, may need to create a new entry');
+            console.log('No time entry ID in localStorage, creating a new entry');
+            await restartTimerWithNewEntry();
           }
         } else {
           console.warn('Invalid start time in localStorage, cannot restore timer');
+          localStorage.removeItem(`timer_${user.uid}`);
         }
       } catch (error) {
         console.error('Error parsing saved timer', error);
@@ -249,7 +254,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   // Save timer to localStorage when it changes
   useEffect(() => {
     if (user && isRunning && currentTask && currentProject && startTime) {
-      localStorage.setItem(`timer_${user.uid}`, JSON.stringify({
+      const timerData = {
         taskId: currentTask.id,
         taskName: currentTask.name,
         projectId: currentProject.id,
@@ -258,7 +263,13 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         startTimeStr: startTime.toISOString(),
         description,
         timeEntryId: activeTimeEntryId
-      }));
+      };
+      
+      const currentData = localStorage.getItem(`timer_${user.uid}`);
+      // Only update if data has changed
+      if (currentData !== JSON.stringify(timerData)) {
+        localStorage.setItem(`timer_${user.uid}`, JSON.stringify(timerData));
+      }
     } else if (user && !isRunning) {
       localStorage.removeItem(`timer_${user.uid}`);
     }
@@ -266,8 +277,10 @@ export function TimerProvider({ children }: { children: ReactNode }) {
 
   // Update description in backend when it changes
   useEffect(() => {
-    const updateDescriptionInBackend = async () => {
-      if (isRunning && activeTimeEntryId) {
+    let timeoutId: NodeJS.Timeout;
+    
+    if (isRunning && activeTimeEntryId) {
+      timeoutId = setTimeout(async () => {
         try {
           await axios.put(`/api/time-entries/${activeTimeEntryId}`, {
             description
@@ -275,15 +288,14 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         } catch (error) {
           console.error('Error updating time entry description:', error);
         }
+      }, 1000);
+    }
+    
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
       }
     };
-    
-    // Add a debounce so we don't send too many requests
-    const timeoutId = setTimeout(() => {
-      updateDescriptionInBackend();
-    }, 1000);
-    
-    return () => clearTimeout(timeoutId);
   }, [description, isRunning, activeTimeEntryId]);
 
   // Start the timer
@@ -500,7 +512,9 @@ export function TimerProvider({ children }: { children: ReactNode }) {
 
   // Update description
   const updateDescription = (newDescription: string) => {
-    setDescription(newDescription);
+    if (newDescription !== description) {  // Only update if changed
+      setDescription(newDescription);
+    }
   };
 
   // Adjust the start time of the current timer
@@ -558,6 +572,46 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Delete a time entry
+  const deleteTimeEntry = async (entryId: number): Promise<boolean> => {
+    try {
+      // Check if the entry being deleted is the current active timer
+      if (isRunning && entryId === activeTimeEntryId) {
+        // If so, need to clear the timer state
+        clearCurrentTimer();
+        return true;
+      }
+      
+      // Otherwise, just return success
+      return true;
+    } catch (error) {
+      console.error('Error in deleteTimeEntry:', error);
+      return false;
+    }
+  };
+  
+  // Helper to clear the current timer state
+  const clearCurrentTimer = () => {
+    setIsRunning(false);
+    setCurrentTask(null);
+    setCurrentProject(null);
+    setStartTime(null);
+    setElapsedTime(0);
+    setDescription('');
+    setActiveTimeEntryId(null);
+    
+    // Clear from localStorage
+    if (user && user.uid) {
+      localStorage.removeItem(`timer_${user.uid}`);
+    }
+    
+    // Clear interval if running
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      setTimerInterval(null);
+    }
+  };
+
   const value = {
     isRunning,
     currentTask,
@@ -569,7 +623,8 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     stopTimer,
     discardTimer,
     setDescription: updateDescription,
-    adjustStartTime
+    adjustStartTime,
+    deleteTimeEntry
   };
 
   return <TimerContext.Provider value={value}>{children}</TimerContext.Provider>;

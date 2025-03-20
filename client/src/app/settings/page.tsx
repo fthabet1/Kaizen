@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -210,28 +211,6 @@ export default function SettingsPage() {
           value={settings.theme}
           options={themeOptions}
           onChange={(e) => handleSettingsChange('theme', e.value)}
-          className="w-full"
-        />
-      </div>
-      
-      <div className="field mb-4">
-        <label htmlFor="hour-format" className="font-medium mb-2 block">Time Format</label>
-        <Dropdown
-          id="hour-format"
-          value={settings.hour_format}
-          options={hourFormatOptions}
-          onChange={(e) => handleSettingsChange('hour_format', e.value)}
-          className="w-full"
-        />
-      </div>
-      
-      <div className="field mb-4">
-        <label htmlFor="week-start" className="font-medium mb-2 block">Week Starts On</label>
-        <Dropdown
-          id="week-start"
-          value={settings.week_start}
-          options={weekStartOptions}
-          onChange={(e) => handleSettingsChange('week_start', e.value)}
           className="w-full"
         />
       </div>

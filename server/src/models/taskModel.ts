@@ -195,73 +195,80 @@ class TaskModel {
     
     // Add date filters if provided
     if (startDate) {
-      timeEntriesQuery += ` AND start_time >= $${timeEntryParams.length + 1}`;
+      timeEntriesQuery += ` AND start_time >= to_timestamp($${timeEntryParams.length + 1}/1000)`;
       timeEntryParams.push(startDate.getTime());
     }
     
     if (endDate) {
-      timeEntriesQuery += ` AND start_time <= $${timeEntryParams.length + 1}`;
+      timeEntriesQuery += ` AND start_time <= to_timestamp($${timeEntryParams.length + 1}/1000)`;
       timeEntryParams.push(endDate.getTime());
     }
     
-    const timeStatsResult = await db.query(timeEntriesQuery, timeEntryParams);
-    const timeStats = timeStatsResult.rows[0];
-    
-    // Get daily time entries
-    let dailyQuery = `
-      SELECT 
-        DATE(start_time) as date,
-        COALESCE(SUM(duration), 0) as total_time
-      FROM time_entries
-      WHERE task_id = $1
-    `;
-    
-    const dailyParams = [taskId];
-    
-    // Add date filters if provided
-    if (startDate) {
-      dailyQuery += ` AND start_time >= $${dailyParams.length + 1}`;
-      dailyParams.push(startDate.getTime());
+    try {
+      const timeStatsResult = await db.query(timeEntriesQuery, timeEntryParams);
+      const timeStats = timeStatsResult.rows[0];
+      
+      // Get daily time entries
+      let dailyQuery = `
+        SELECT 
+          DATE(start_time) as date,
+          COALESCE(SUM(duration), 0) as total_time
+        FROM time_entries
+        WHERE task_id = $1
+      `;
+      
+      const dailyParams = [taskId];
+      
+      // Add date filters if provided
+      if (startDate) {
+        dailyQuery += ` AND start_time >= to_timestamp($${dailyParams.length + 1}/1000)`;
+        dailyParams.push(startDate.getTime());
+      }
+      
+      if (endDate) {
+        dailyQuery += ` AND start_time <= to_timestamp($${dailyParams.length + 1}/1000)`;
+        dailyParams.push(endDate.getTime());
+      }
+      
+      dailyQuery += ` GROUP BY DATE(start_time) ORDER BY DATE(start_time)`;
+      
+      const dailyResult = await db.query(dailyQuery, dailyParams);
+      
+      // Get recent time entries
+      let recentEntriesQuery = `
+        SELECT *
+        FROM time_entries
+        WHERE task_id = $1
+        ORDER BY start_time DESC
+        LIMIT 10
+      `;
+      
+      const recentEntriesResult = await db.query(recentEntriesQuery, [taskId]);
+      
+      return {
+        id: task.id,
+        name: task.name,
+        description: task.description,
+        projectId: task.project_id,
+        projectName: task.project_name,
+        projectColor: task.project_color,
+        isCompleted: task.is_completed,
+        entryCount: parseInt(timeStats.entry_count) || 0,
+        totalTime: parseInt(timeStats.total_time) || 0,
+        firstEntry: timeStats.first_entry,
+        lastEntry: timeStats.last_entry,
+        dailyStats: dailyResult.rows.map(row => ({
+          date: row.date,
+          totalTime: parseInt(row.total_time)
+        })),
+        recentEntries: recentEntriesResult.rows
+      };
+    } catch (error) {
+      console.error('Error in getTaskStats:', error);
+      console.error('Query:', timeEntriesQuery);
+      console.error('Params:', timeEntryParams);
+      throw error;
     }
-    
-    if (endDate) {
-      dailyQuery += ` AND start_time <= $${dailyParams.length + 1}`;
-      dailyParams.push(endDate.getTime());
-    }
-    
-    dailyQuery += ` GROUP BY DATE(start_time) ORDER BY DATE(start_time)`;
-    
-    const dailyResult = await db.query(dailyQuery, dailyParams);
-    
-    // Get recent time entries
-    let recentEntriesQuery = `
-      SELECT *
-      FROM time_entries
-      WHERE task_id = $1
-      ORDER BY start_time DESC
-      LIMIT 10
-    `;
-    
-    const recentEntriesResult = await db.query(recentEntriesQuery, [taskId]);
-    
-    return {
-      id: task.id,
-      name: task.name,
-      description: task.description,
-      isCompleted: task.is_completed,
-      projectId: task.project_id,
-      projectName: task.project_name,
-      projectColor: task.project_color,
-      entryCount: parseInt(timeStats.entry_count),
-      totalTime: parseInt(timeStats.total_time) || 0,
-      firstEntry: timeStats.first_entry,
-      lastEntry: timeStats.last_entry,
-      dailyTime: dailyResult.rows.map(row => ({
-        date: row.date,
-        totalTime: parseInt(row.total_time)
-      })),
-      recentEntries: recentEntriesResult.rows
-    };
   }
 
   /**

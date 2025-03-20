@@ -4,6 +4,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContexts';
+import { useTimer } from '../../contexts/TimerContext';
 import { useRouter } from 'next/navigation';
 import axios from '../../utils/axiosConfig';
 import { format, parseISO, startOfWeek, endOfWeek } from 'date-fns';
@@ -20,6 +21,7 @@ import { MultiSelect } from 'primereact/multiselect';
 import { Card } from 'primereact/card';
 import { ProgressSpinner } from 'primereact/progressspinner';
 import { Toast } from 'primereact/toast';
+import { ConfirmDialog, confirmDialog } from 'primereact/confirmdialog';
 
 interface Project {
   id: number;
@@ -46,11 +48,13 @@ interface DateRange {
 }
 
 export default function RecentActivityTable() {
-  const { user } = useAuth();
+  const { user, token, isReady } = useAuth();
+  const { deleteTimeEntry: handleTimerEntryDelete } = useTimer();
   const toast = useRef<Toast>(null);
   const router = useRouter();
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState<number | null>(null);
   const [filters, setFilters] = useState<DataTableFilterMeta>({
     global: { value: null, matchMode: 'contains' },
     project_name: { value: null, matchMode: 'contains' },
@@ -63,30 +67,95 @@ export default function RecentActivityTable() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjects, setSelectedProjects] = useState<Project[]>([]);
 
+  // Setup event listener for API connection errors
   useEffect(() => {
-    if (user) {
-      fetchData();
-    }
-  }, [user]);
-
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const [activityResponse, projectsResponse] = await Promise.all([
-        axios.get('/api/time-entries?limit=50'),
-        axios.get('/api/projects')
-      ]);
-      
-      setRecentActivity(activityResponse.data);
-      setProjects(projectsResponse.data);
-    } catch (error) {
-      console.error('Error fetching data:', error);
+    const handleApiConnectionError = (event: CustomEvent) => {
       toast.current?.show({
         severity: 'error',
-        summary: 'Error',
-        detail: 'Failed to load recent activity data',
-        life: 3000
+        summary: 'Connection Error',
+        detail: event.detail.message,
+        life: 5000
       });
+    };
+
+    window.addEventListener('apiConnectionError', handleApiConnectionError as EventListener);
+    
+    return () => {
+      window.removeEventListener('apiConnectionError', handleApiConnectionError as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isReady && user && token) {
+      fetchData();
+    } else if (isReady && !user) {
+      setLoading(false);
+      setRecentActivity([]);
+    }
+  }, [user, isReady, token]);
+
+  const fetchData = async () => {
+    if (!token) {
+      console.error('No authentication token available');
+      setLoading(false);
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      
+      console.log('Fetching time entries and projects data');
+      
+      const requestConfig = {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        timeout: 5000
+      };
+      
+      const [activityResponse, projectsResponse] = await Promise.all([
+        axios.get('/api/time-entries?limit=50', requestConfig),
+        axios.get('/api/projects', requestConfig)
+      ]);
+      
+      if (activityResponse.data && Array.isArray(activityResponse.data)) {
+        console.log(`Loaded ${activityResponse.data.length} time entries`);
+        setRecentActivity(activityResponse.data);
+      } else {
+        console.warn('Unexpected time entries response format', activityResponse.data);
+        setRecentActivity([]);
+      }
+      
+      if (projectsResponse.data && Array.isArray(projectsResponse.data)) {
+        console.log(`Loaded ${projectsResponse.data.length} projects`);
+        setProjects(projectsResponse.data);
+      } else {
+        console.warn('Unexpected projects response format', projectsResponse.data);
+        setProjects([]);
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      
+      // Check if it's a network error
+      if (axios.isAxiosError(error) && !error.response) {
+        toast.current?.show({
+          severity: 'error',
+          summary: 'Connection Error',
+          detail: 'Unable to connect to the server. Please check if the API is running.',
+          life: 5000
+        });
+      } else {
+        toast.current?.show({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Failed to load recent activity data. Please try refreshing.',
+          life: 3000
+        });
+      }
+      
+      // Set empty arrays to prevent UI errors
+      setRecentActivity([]);
+      setProjects([]);
     } finally {
       setLoading(false);
     }
@@ -127,15 +196,15 @@ export default function RecentActivityTable() {
     return (
       <div className="flex flex-column sm:flex-row justify-content-between align-items-start sm:align-items-center gap-3">
         <div className="flex align-items-center">
-          <span className="p-input-icon-left">
-            <i className="pi pi-search" />
+          
+            
             <InputText 
               value={globalFilterValue} 
               onChange={onGlobalFilterChange} 
               placeholder="Search" 
               className="w-full"
             />
-          </span>
+          
         </div>
         
         <div className="flex gap-2 flex-column sm:flex-row">
@@ -229,6 +298,105 @@ export default function RecentActivityTable() {
     return rowData.description || <span className="text-color-secondary">No description</span>;
   };
 
+  const actionsBodyTemplate = (rowData: RecentActivity) => {
+    return (
+      <div className="flex gap-2 justify-content-center">
+        <Button
+          icon="pi pi-trash"
+          className="p-button-rounded p-button-danger p-button-text"
+          tooltip="Delete entry"
+          tooltipOptions={{ position: 'top' }}
+          onClick={() => confirmDelete(rowData.id, rowData.task_name)}
+          loading={deleting === rowData.id}
+          disabled={deleting !== null}
+        />
+      </div>
+    );
+  };
+
+  const deleteTimeEntry = async (entryId: number) => {
+    if (!token) {
+      console.error('No authentication token available for deletion');
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Authentication Error',
+        detail: 'Please log in again to delete time entries',
+        life: 3000
+      });
+      return;
+    }
+    
+    try {
+      setDeleting(entryId);
+      
+      // First delete from the server
+      await axios.delete(`/api/time-entries/${entryId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        timeout: 5000
+      });
+      
+      // Then update the TimerContext if needed
+      await handleTimerEntryDelete(entryId);
+      
+      // Finally, update local state by removing the deleted entry
+      setRecentActivity(prev => prev.filter(entry => entry.id !== entryId));
+      
+      // Trigger dashboard refresh
+      fetchData();
+      
+      // Dispatch custom event to notify other components
+      window.dispatchEvent(new CustomEvent('timeEntryDeleted'));
+      
+      toast.current?.show({
+        severity: 'success',
+        summary: 'Success',
+        detail: 'Time entry deleted successfully',
+        life: 3000
+      });
+    } catch (error) {
+      console.error('Error deleting time entry:', error);
+      
+      // Check if it's a network error
+      if (axios.isAxiosError(error) && !error.response) {
+        toast.current?.show({
+          severity: 'error',
+          summary: 'Connection Error',
+          detail: 'Unable to connect to the server. Please try again later.',
+          life: 5000
+        });
+      } else if (axios.isAxiosError(error) && error.response?.status === 401) {
+        toast.current?.show({
+          severity: 'error',
+          summary: 'Authentication Error',
+          detail: 'Your session has expired. Please log in again.',
+          life: 3000
+        });
+      } else {
+        toast.current?.show({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Failed to delete time entry. Please try again.',
+          life: 3000
+        });
+      }
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const confirmDelete = (entryId: number, taskName: string) => {
+    confirmDialog({
+      message: `Are you sure you want to delete the time entry for "${taskName}"?`,
+      header: 'Confirm Deletion',
+      icon: 'pi pi-exclamation-triangle',
+      acceptClassName: 'p-button-danger',
+      accept: () => deleteTimeEntry(entryId),
+      reject: () => { /* do nothing */ }
+    });
+  };
+
   const rowExpansionTemplate = (data: RecentActivity) => {
     return (
       <div className="p-3">
@@ -270,6 +438,16 @@ export default function RecentActivityTable() {
                   {data.description || 'No description provided'}
                 </div>
               </div>
+              <div className="mt-3 flex justify-content-end">
+                <Button
+                  label="Delete Entry"
+                  icon="pi pi-trash"
+                  className="p-button-danger p-button-sm"
+                  onClick={() => confirmDelete(data.id, data.task_name)}
+                  loading={deleting === data.id}
+                  disabled={deleting !== null}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -297,10 +475,6 @@ export default function RecentActivityTable() {
     );
   };
 
-  const navigateToTask = (taskId: number) => {
-    router.push(`/tasks/${taskId}`);
-  };
-
   if (loading) {
     return (
       <div className="flex justify-content-center align-items-center" style={{ height: '300px' }}>
@@ -312,13 +486,13 @@ export default function RecentActivityTable() {
   return (
     <Card>
       <Toast ref={toast} />
+      <ConfirmDialog />
       
       <DataTable 
         value={recentActivity}
         expandedRows={expandedRows}
         onRowToggle={(e) => setExpandedRows(e.data)}
         rowExpansionTemplate={rowExpansionTemplate}
-        onRowClick={(e) => navigateToTask(e.data.task_id)}
         dataKey="id"
         paginator 
         rows={10}
@@ -381,6 +555,13 @@ export default function RecentActivityTable() {
           header="Description" 
           body={descriptionBodyTemplate}
           style={{ minWidth: '12rem' }}
+        />
+        <Column 
+          body={actionsBodyTemplate}
+          headerStyle={{ width: '5rem', textAlign: 'center' }}
+          bodyStyle={{ textAlign: 'center' }}
+          header="Actions"
+          exportable={false}
         />
       </DataTable>
     </Card>

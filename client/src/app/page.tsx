@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../contexts/AuthContexts';
 import Link from 'next/link';
@@ -13,12 +13,17 @@ import { Divider } from 'primereact/divider';
 export default function Home() {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const [year, setYear] = useState('2024');
 
   useEffect(() => {
     if (!loading && user) {
       router.push('/dashboard');
     }
   }, [user, loading, router]);
+
+  useEffect(() => {
+    setYear(new Date().getFullYear().toString());
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-column overflow-hidden">
@@ -146,7 +151,7 @@ export default function Home() {
             </div>
           </div>
           <div className="mt-2 md:mt-4 mb-0 text-center text-gray-500 text-xs">
-            &copy; {new Date().getFullYear()} Kaizen. All rights reserved.
+            &copy; {year} Kaizen. All rights reserved.
           </div>
         </div>
       </footer>

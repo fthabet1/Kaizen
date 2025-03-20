@@ -161,12 +161,12 @@ class ProjectModel {
     
     // Add date filters if provided
     if (startDate) {
-      whereClause += ` AND te.start_time >= $${queryParams.length + 1}`;
+      whereClause += ` AND te.start_time >= to_timestamp($${queryParams.length + 1}/1000)`;
       queryParams.push(startDate.getTime());
     }
     
     if (endDate) {
-      whereClause += ` AND te.start_time <= $${queryParams.length + 1}`;
+      whereClause += ` AND te.start_time <= to_timestamp($${queryParams.length + 1}/1000)`;
       queryParams.push(endDate.getTime());
     }
     
@@ -222,33 +222,40 @@ class ProjectModel {
     
     // Add date filters if provided
     if (startDate) {
-      timeEntriesQuery += ` AND te.start_time >= $${timeEntryParams.length + 1}`;
+      timeEntriesQuery += ` AND te.start_time >= to_timestamp($${timeEntryParams.length + 1}/1000)`;
       timeEntryParams.push(startDate.getTime());
     }
     
     if (endDate) {
-      timeEntriesQuery += ` AND te.start_time <= $${timeEntryParams.length + 1}`;
+      timeEntriesQuery += ` AND te.start_time <= to_timestamp($${timeEntryParams.length + 1}/1000)`;
       timeEntryParams.push(endDate.getTime());
     }
     
     timeEntriesQuery += ` GROUP BY DATE(te.start_time) ORDER BY DATE(te.start_time)`;
     
-    const dailyTimeResult = await db.query(timeEntriesQuery, timeEntryParams);
-    
-    return {
-      id: projectStats.project_id,
-      name: projectStats.project_name,
-      color: projectStats.project_color,
-      taskCount: parseInt(projectStats.task_count),
-      completedTasks: parseInt(taskStats.completed_tasks),
-      totalTasks: parseInt(taskStats.total_tasks),
-      timeEntryCount: parseInt(projectStats.time_entry_count),
-      totalTime: parseInt(projectStats.total_time) || 0,
-      dailyTime: dailyTimeResult.rows.map((row) => ({
-        date: row.date,
-        totalTime: parseInt(row.total_time)
-      }))
-    };
+    try {
+      const dailyTimeResult = await db.query(timeEntriesQuery, timeEntryParams);
+      
+      return {
+        id: projectStats.project_id,
+        name: projectStats.project_name,
+        color: projectStats.project_color,
+        taskCount: parseInt(projectStats.task_count),
+        completedTasks: parseInt(taskStats.completed_tasks),
+        totalTasks: parseInt(taskStats.total_tasks),
+        timeEntryCount: parseInt(projectStats.time_entry_count),
+        totalTime: parseInt(projectStats.total_time) || 0,
+        dailyTime: dailyTimeResult.rows.map((row) => ({
+          date: row.date,
+          totalTime: parseInt(row.total_time)
+        }))
+      };
+    } catch (error) {
+      console.error('Error in getProjectStats daily time query:', error);
+      console.error('Query:', timeEntriesQuery);
+      console.error('Params:', timeEntryParams);
+      throw error;
+    }
   }
 
   /**

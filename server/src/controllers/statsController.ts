@@ -9,7 +9,6 @@ export const getUserStats = async (req: Request, res: Response) => {
     
     if (!userId) {
       res.status(401).json({ error: 'Unauthorized' });
-
       return;
     }
     
@@ -21,30 +20,43 @@ export const getUserStats = async (req: Request, res: Response) => {
     const userIdResult = await TimeEntryModel.getUserIdByAuthId(userId);
     
     // Get stats in parallel
-    const [
-      totalTrackedTime,
-      projectStats,
-      dailyStats,
-      weeklyStats,
-      monthlyStats
-    ] = await Promise.all([
-      TimeEntryModel.getTotalTrackedTime(userIdResult, startDate, endDate),
-      TimeEntryModel.getTimeByProject(userIdResult, startDate, endDate),
-      TimeEntryModel.getTimeEntriesByDay(userIdResult, startDate, endDate),
-      TimeEntryModel.getTimeEntriesByWeek(userIdResult, startDate, endDate),
-      TimeEntryModel.getTimeEntriesByMonth(userIdResult, startDate, endDate)
-    ]);
-    
-    res.status(200).json({
-      totalTrackedTime,
-      projectStats,
-      dailyStats,
-      weeklyStats,
-      monthlyStats
-    });
-  } catch (error: any) {
+    try {
+      const [
+        totalTrackedTime,
+        projectStats,
+        dailyStats,
+        weeklyStats,
+        monthlyStats
+      ] = await Promise.all([
+        TimeEntryModel.getTotalTrackedTime(userIdResult, startDate, endDate),
+        TimeEntryModel.getTimeByProject(userIdResult, startDate, endDate),
+        TimeEntryModel.getTimeEntriesByDay(userIdResult, startDate, endDate),
+        TimeEntryModel.getTimeEntriesByWeek(userIdResult, startDate, endDate),
+        TimeEntryModel.getTimeEntriesByMonth(userIdResult, startDate, endDate)
+      ]);
+      
+      res.status(200).json({
+        totalTrackedTime,
+        projectStats,
+        dailyStats,
+        weeklyStats,
+        monthlyStats
+      });
+    } catch (statsError: unknown) {
+      console.error('Error fetching stats:', statsError);
+      if (statsError instanceof Error) {
+        res.status(500).json({ error: 'Error fetching stats', details: statsError.message });
+      } else {
+        res.status(500).json({ error: 'Error fetching stats', details: 'Unknown error occurred' });
+      }
+    }
+  } catch (error: unknown) {
     console.error('Error getting user stats:', error);
-    res.status(500).json({ error: error.message || 'Error getting user stats' });
+    if (error instanceof Error) {
+      res.status(500).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: 'Error getting user stats' });
+    }
   }
 };
 

@@ -30,15 +30,15 @@ class TimeEntryModel {
       
       query = `
         INSERT INTO time_entries (task_id, user_id, start_time, end_time, duration, description)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        VALUES ($1, $2, $3::timestamp, $4::timestamp, $5, $6)
         RETURNING *
       `;
       
       params = [
         task_id, 
         userId, 
-        start_time, 
-        end_time, 
+        start_time.toISOString(), 
+        end_time.toISOString(), 
         calculatedDuration, 
         description || null
       ];
@@ -46,20 +46,27 @@ class TimeEntryModel {
       // If no end time, don't include duration
       query = `
         INSERT INTO time_entries (task_id, user_id, start_time, description)
-        VALUES ($1, $2, $3, $4)
+        VALUES ($1, $2, $3::timestamp, $4)
         RETURNING *
       `;
       
       params = [
         task_id, 
         userId, 
-        start_time, 
+        start_time.toISOString(), 
         description || null
       ];
     }
     
-    const result = await db.query(query, params);
-    return result.rows[0];
+    try {
+      const result = await db.query(query, params);
+      return result.rows[0];
+    } catch (error) {
+      console.error('Error creating time entry:', error);
+      console.error('Query:', query);
+      console.error('Params:', params);
+      throw error;
+    }
   }
 
   /**
@@ -86,7 +93,7 @@ class TimeEntryModel {
       WHERE te.user_id = $1
     `;
     
-    const params = [userId];
+    const params: (number | string)[] = [userId];
     let paramIndex = 2;
     
     // Add task_id filter if provided
@@ -103,14 +110,14 @@ class TimeEntryModel {
     
     // Add date filters if provided
     if (options.startDate) {
-      query += ` AND te.start_time >= $${paramIndex}`;
-      params.push(options.startDate.getTime());
+      query += ` AND te.start_time >= $${paramIndex}::timestamp`;
+      params.push(options.startDate.toISOString());
       paramIndex++;
     }
     
     if (options.endDate) {
-      query += ` AND te.start_time <= $${paramIndex}`;
-      params.push(options.endDate.getTime());
+      query += ` AND te.start_time <= $${paramIndex}::timestamp`;
+      params.push(options.endDate.toISOString());
       paramIndex++;
     }
     
@@ -196,14 +203,14 @@ class TimeEntryModel {
     }
 
     if (data.start_time !== undefined) {
-      updates.push(`start_time = $${paramIndex}`);
-      values.push(data.start_time);
+      updates.push(`start_time = $${paramIndex}::timestamp`);
+      values.push(data.start_time.toISOString());
       paramIndex++;
     }
 
     if (data.end_time !== undefined) {
-      updates.push(`end_time = $${paramIndex}`);
-      values.push(data.end_time);
+      updates.push(`end_time = $${paramIndex}::timestamp`);
+      values.push(data.end_time.toISOString());
       paramIndex++;
       
       // If end_time is provided but no duration, calculate it
@@ -252,8 +259,15 @@ class TimeEntryModel {
       RETURNING *
     `;
 
-    const result = await db.query(query, values);
-    return result.rows[0];
+    try {
+      const result = await db.query(query, values);
+      return result.rows[0];
+    } catch (error) {
+      console.error('Error updating time entry:', error);
+      console.error('Query:', query);
+      console.error('Params:', values);
+      throw error;
+    }
   }
 
   /**
@@ -279,24 +293,31 @@ class TimeEntryModel {
       AND duration IS NOT NULL
     `;
     
-    const params = [userId];
+    const params: (number | string)[] = [userId];
     let paramIndex = 2;
     
     // Add date filters if provided
     if (startDate) {
-      query += ` AND start_time >= $${paramIndex}`;
-      params.push(startDate.getTime());
+      query += ` AND start_time >= $${paramIndex}::timestamp`;
+      params.push(startDate.toISOString());
       paramIndex++;
     }
     
     if (endDate) {
-      query += ` AND start_time <= $${paramIndex}`;
-      params.push(endDate.getTime());
+      query += ` AND start_time <= $${paramIndex}::timestamp`;
+      params.push(endDate.toISOString());
       paramIndex++;
     }
     
-    const result = await db.query(query, params);
-    return parseInt(result.rows[0].total_time);
+    try {
+      const result = await db.query(query, params);
+      return parseInt(result.rows[0].total_time);
+    } catch (error) {
+      console.error('Error in getTotalTrackedTime:', error);
+      console.error('Query:', query);
+      console.error('Params:', params);
+      throw error;
+    }
   }
 
   /**
@@ -316,26 +337,33 @@ class TimeEntryModel {
       AND duration IS NOT NULL
     `;
     
-    const params = [userId];
+    const params: (number | string)[] = [userId];
     let paramIndex = 2;
     
     // Add date filters if provided
     if (startDate) {
-      query += ` AND start_time >= $${paramIndex}`;
-      params.push(startDate.getTime());
+      query += ` AND start_time >= $${paramIndex}::timestamp`;
+      params.push(startDate.toISOString());
       paramIndex++;
     }
     
     if (endDate) {
-      query += ` AND start_time <= $${paramIndex}`;
-      params.push(endDate.getTime());
+      query += ` AND start_time <= $${paramIndex}::timestamp`;
+      params.push(endDate.toISOString());
       paramIndex++;
     }
     
-    query += ` GROUP BY DATE(start_time) ORDER BY DATE(start_time)`;
+    query += ` GROUP BY DATE(start_time) ORDER BY date`;
     
-    const result = await db.query(query, params);
-    return result.rows;
+    try {
+      const result = await db.query(query, params);
+      return result.rows;
+    } catch (error) {
+      console.error('Error in getTimeEntriesByDay:', error);
+      console.error('Query:', query);
+      console.error('Params:', params);
+      throw error;
+    }
   }
 
   /**
@@ -355,29 +383,36 @@ class TimeEntryModel {
       AND duration IS NOT NULL
     `;
     
-    const params = [userId];
+    const params: (number | string)[] = [userId];
     let paramIndex = 2;
     
     // Add date filters if provided
     if (startDate) {
-      query += ` AND start_time >= $${paramIndex}`;
-      params.push(startDate.getTime());
+      query += ` AND start_time >= $${paramIndex}::timestamp`;
+      params.push(startDate.toISOString());
       paramIndex++;
     }
     
     if (endDate) {
-      query += ` AND start_time <= $${paramIndex}`;
-      params.push(endDate.getTime());
+      query += ` AND start_time <= $${paramIndex}::timestamp`;
+      params.push(endDate.toISOString());
       paramIndex++;
     }
     
     query += ` GROUP BY DATE_TRUNC('week', start_time) ORDER BY week_start`;
     
-    const result = await db.query(query, params);
-    return result.rows.map(row => ({
-      weekStart: row.week_start,
-      totalTime: parseInt(row.total_time)
-    }));
+    try {
+      const result = await db.query(query, params);
+      return result.rows.map(row => ({
+        weekStart: row.week_start,
+        totalTime: parseInt(row.total_time)
+      }));
+    } catch (error) {
+      console.error('Error in getTimeEntriesByWeek:', error);
+      console.error('Query:', query);
+      console.error('Params:', params);
+      throw error;
+    }
   }
 
   /**
@@ -397,29 +432,36 @@ class TimeEntryModel {
       AND duration IS NOT NULL
     `;
     
-    const params = [userId];
+    const params: (number | string)[] = [userId];
     let paramIndex = 2;
     
     // Add date filters if provided
     if (startDate) {
-      query += ` AND start_time >= $${paramIndex}`;
-      params.push(startDate.getTime());
+      query += ` AND start_time >= $${paramIndex}::timestamp`;
+      params.push(startDate.toISOString());
       paramIndex++;
     }
     
     if (endDate) {
-      query += ` AND start_time <= $${paramIndex}`;
-      params.push(endDate.getTime());
+      query += ` AND start_time <= $${paramIndex}::timestamp`;
+      params.push(endDate.toISOString());
       paramIndex++;
     }
     
     query += ` GROUP BY DATE_TRUNC('month', start_time) ORDER BY month`;
     
-    const result = await db.query(query, params);
-    return result.rows.map(row => ({
-      month: row.month,
-      totalTime: parseInt(row.total_time)
-    }));
+    try {
+      const result = await db.query(query, params);
+      return result.rows.map(row => ({
+        month: row.month,
+        totalTime: parseInt(row.total_time)
+      }));
+    } catch (error) {
+      console.error('Error in getTimeEntriesByMonth:', error);
+      console.error('Query:', query);
+      console.error('Params:', params);
+      throw error;
+    }
   }
 
   /**
@@ -444,37 +486,44 @@ class TimeEntryModel {
       AND te.duration IS NOT NULL
     `;
     
-    const params = [userId];
+    const params: (number | string)[] = [userId];
     let paramIndex = 2;
     
     // Add date filters if provided
     if (startDate) {
-      query += ` AND te.start_time >= $${paramIndex}`;
-      params.push(startDate.getTime());
+      query += ` AND te.start_time >= $${paramIndex}::timestamp`;
+      params.push(startDate.toISOString());
       paramIndex++;
     }
     
     if (endDate) {
-      query += ` AND te.start_time <= $${paramIndex}`;
-      params.push(endDate.getTime());
+      query += ` AND te.start_time <= $${paramIndex}::timestamp`;
+      params.push(endDate.toISOString());
       paramIndex++;
     }
     
     query += ` GROUP BY p.id, p.name, p.color ORDER BY total_time DESC`;
     
-    const result = await db.query(query, params);
-    
-    // Calculate percentages
-    const projects = result.rows;
-    const totalTime = projects.reduce((sum, project) => sum + parseInt(project.total_time), 0);
-    
-    return projects.map(project => ({
-      id: project.id,
-      name: project.name,
-      color: project.color,
-      totalTime: parseInt(project.total_time),
-      percentage: totalTime > 0 ? (parseInt(project.total_time) / totalTime) * 100 : 0
-    }));
+    try {
+      const result = await db.query(query, params);
+      
+      // Calculate percentages
+      const projects = result.rows;
+      const totalTime = projects.reduce((sum, project) => sum + parseInt(project.total_time), 0);
+      
+      return projects.map(project => ({
+        id: project.id,
+        name: project.name,
+        color: project.color,
+        totalTime: parseInt(project.total_time),
+        percentage: totalTime > 0 ? (parseInt(project.total_time) / totalTime) * 100 : 0
+      }));
+    } catch (error) {
+      console.error('Error in getTimeByProject:', error);
+      console.error('Query:', query);
+      console.error('Params:', params);
+      throw error;
+    }
   }
 }
 

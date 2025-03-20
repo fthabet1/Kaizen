@@ -10,6 +10,7 @@ import {
   format, parseISO, startOfWeek, endOfWeek 
 } from 'date-fns';
 import { formatTime } from '../../utils/timeUtils';
+import { startServerAvailabilityCheck } from '../../utils/serverCheck';
 
 import DailyActivityGraph from '../../components/dashboard/DailyActivityGraph';
 import RecentActivityTable from '../../components/dashboard/RecentActivityTable';
@@ -49,7 +50,7 @@ interface WeeklyStats {
 }
 
 export default function Dashboard() {
-  const { user, loading, isReady } = useAuth();
+  const { user, loading, isReady, token } = useAuth();
   const router = useRouter();
   const toast = useRef<Toast>(null);
   
@@ -69,19 +70,113 @@ export default function Dashboard() {
     }
   }, [user, isReady]);
 
+  // Setup server availability check
+  useEffect(() => {
+    let stopServerCheck: (() => void) | null = null;
+    
+    const handleApiConnectionError = () => {
+      console.log('Starting server availability check...');
+      
+      // Show a loading status toast
+      toast.current?.show({
+        severity: 'info',
+        summary: 'Checking Connection',
+        detail: 'Attempting to reconnect to the server...',
+        life: 5000
+      });
+      
+      // Start checking for server availability
+      stopServerCheck = startServerAvailabilityCheck({
+        onServerAvailable: () => {
+          console.log('Server is available again, refreshing data...');
+          toast.current?.show({
+            severity: 'success',
+            summary: 'Connected',
+            detail: 'Server connection restored. Refreshing data...',
+            life: 3000
+          });
+          
+          // Reload data when server becomes available
+          if (user && token && isReady) {
+            fetchStats();
+          }
+        },
+        maxRetries: 10 // Try 10 times (about 100 seconds)
+      });
+    };
+    
+    // Listen for API connection errors
+    window.addEventListener('apiConnectionError', handleApiConnectionError as EventListener);
+    
+    return () => {
+      window.removeEventListener('apiConnectionError', handleApiConnectionError as EventListener);
+      if (stopServerCheck) stopServerCheck();
+    };
+  }, [user, token, isReady]);
+
   const fetchStats = async () => {
     try {
       setLoadingStats(true);
       
-      const response = await axios.get('/api/stats');
-      setStats(response.data);
+      // Ensure we have a token before making the request
+      if (!token) {
+        console.error('No authentication token available');
+        toast.current?.show({ 
+          severity: 'error', 
+          summary: 'Authentication Error', 
+          detail: 'Please log in again to access your dashboard', 
+          life: 3000 
+        });
+        return;
+      }
+      
+      console.log('Fetching dashboard stats from API...');
+      
+      const response = await axios.get('/api/stats', {
+        timeout: 8000, // Longer timeout for stats which may take time to calculate
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.data) {
+        console.log('Stats fetched successfully');
+        setStats(response.data);
+      } else {
+        console.error('Stats API returned empty response');
+        toast.current?.show({ 
+          severity: 'warn', 
+          summary: 'No Data', 
+          detail: 'No statistics available for your account yet', 
+          life: 3000 
+        });
+      }
     } catch (error) {
-      console.error('Error fetching stats', error);
-      toast.current?.show({ 
-        severity: 'error', 
-        summary: 'Error', 
-        detail: 'Failed to fetch dashboard stats', 
-        life: 3000 
+      console.error('Error fetching stats:', error);
+      
+      // Check if it's a network error
+      if (axios.isAxiosError(error) && !error.response) {
+        toast.current?.show({ 
+          severity: 'error', 
+          summary: 'Connection Error', 
+          detail: 'Unable to connect to the server. Is the API running?', 
+          life: 5000 
+        });
+      } else {
+        toast.current?.show({ 
+          severity: 'error', 
+          summary: 'Error', 
+          detail: 'Failed to fetch dashboard stats. Please try refreshing.', 
+          life: 3000 
+        });
+      }
+      
+      // Set empty stats to prevent UI errors
+      setStats({
+        totalTrackedTime: 0,
+        projectStats: [],
+        dailyStats: [],
+        weeklyStats: []
       });
     } finally {
       setLoadingStats(false);
@@ -156,7 +251,7 @@ export default function Dashboard() {
 
       {/* Charts Section */}
       <div className="grid mb-4">
-        {/* Daily Activity Chart */}
+        {/* Activity Summary Chart */}
         <div className="col-12 lg:col-6">
           <DailyActivityGraph />
         </div>

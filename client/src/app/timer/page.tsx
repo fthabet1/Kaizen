@@ -74,6 +74,17 @@ export default function TimerPage() {
   // Project filtering for task dropdown
   const [projectFilter, setProjectFilter] = useState<number | null>(null);
 
+  // Past time entry state
+  const [showPastEntryDialog, setShowPastEntryDialog] = useState(false);
+  const [pastEntryDate, setPastEntryDate] = useState<Date | null>(null);
+  const [pastEntryStartTime, setPastEntryStartTime] = useState<Date | null>(null);
+  const [pastEntryEndTime, setPastEntryEndTime] = useState<Date | null>(null);
+  const [pastEntryTask, setPastEntryTask] = useState<Task | null>(null);
+  const [pastEntryProject, setPastEntryProject] = useState<Project | null>(null);
+  const [pastEntryDescription, setPastEntryDescription] = useState<string>('');
+  const [pastEntryDuration, setPastEntryDuration] = useState<number>(0);
+  const [creatingPastEntry, setCreatingPastEntry] = useState<boolean>(false);
+
   // Format time from seconds to readable format (HH:MM:SS)
   const formatTimerDisplay = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);
@@ -136,19 +147,19 @@ export default function TimerPage() {
     }
   }, [loadingData, tasks, projects, searchParams]);
 
-  // Check if there is an active timer before rendering the main UI
+  // Initialize description only when timer starts or when component mounts
   useEffect(() => {
-    // If there's an active timer detected but the UI doesn't show it yet,
-    // force update the state to ensure it's displayed
-    if (isRunning && currentTask && currentProject) {
-      console.log("Active timer detected, ensuring timer view is displayed");
+    if (isRunning && currentDescription && !description) {
+      setDescription(currentDescription);
+    } else if (!isRunning) {
+      setDescription('');
     }
-  }, [isRunning, currentTask, currentProject]);
+  }, [isRunning]);  // Only depend on isRunning, not currentDescription
 
   // Set up timer adjustment when timer is running
   useEffect(() => {
     if (isRunning && startTime) {
-      setAdjustedStartTime(new Date(startTime));
+      setAdjustedStartTime(startTime);
     }
   }, [isRunning, startTime]);
 
@@ -159,6 +170,49 @@ export default function TimerPage() {
       setSelectedTask(null);
     }
   }, [projectFilter, selectedTask]);
+
+  // Calculate duration when start or end time changes
+  useEffect(() => {
+    if (pastEntryStartTime && pastEntryEndTime) {
+      // Create temporary full date-time objects for comparison
+      const tempStartDateTime = new Date();
+      tempStartDateTime.setHours(
+        pastEntryStartTime.getHours(),
+        pastEntryStartTime.getMinutes(),
+        pastEntryStartTime.getSeconds(),
+        0
+      );
+      
+      const tempEndDateTime = new Date();
+      tempEndDateTime.setHours(
+        pastEntryEndTime.getHours(),
+        pastEntryEndTime.getMinutes(),
+        pastEntryEndTime.getSeconds(),
+        0
+      );
+      
+      // Check if this likely crosses midnight (end time earlier than start time)
+      const isCrossingMidnight = pastEntryEndTime.getHours() < pastEntryStartTime.getHours();
+      
+      // If crossing midnight, add a day to the end time for duration calculation
+      if (isCrossingMidnight) {
+        tempEndDateTime.setDate(tempEndDateTime.getDate() + 1);
+      }
+      
+      // Calculate duration in seconds
+      const durationSeconds = Math.floor((tempEndDateTime.getTime() - tempStartDateTime.getTime()) / 1000);
+      
+      if (durationSeconds > 0) {
+        setPastEntryDuration(durationSeconds);
+      } else {
+        // If duration is negative or zero, reset it
+        setPastEntryDuration(0);
+      }
+    } else {
+      // If either start or end time is missing, reset duration
+      setPastEntryDuration(0);
+    }
+  }, [pastEntryStartTime, pastEntryEndTime]);
 
   const fetchProjectsAndTasks = async () => {
     try {
@@ -407,18 +461,200 @@ export default function TimerPage() {
   );
 
   const handleUpdateTimerDescription = (newDescription: string) => {
-    updateTimerDescription(newDescription);
-    toast.current?.show({
-      severity: 'success',
-      summary: 'Description Updated',
-      detail: 'Timer description has been updated',
-      life: 2000
-    });
+    setDescription(newDescription);  // Update local state
+    updateTimerDescription(newDescription);  // Update timer context
   };
 
-  if (loading || !isReady || loadingData) {
+  // Initialize past entry form
+  const openPastEntryDialog = () => {
+    // Initialize with empty values
+    setPastEntryDate(null);
+    setPastEntryStartTime(null);
+    setPastEntryEndTime(null);
+    setPastEntryTask(null);
+    setPastEntryProject(null);
+    setPastEntryDescription('');
+    setPastEntryDuration(0);
+    
+    setShowPastEntryDialog(true);
+  };
+
+  // Combine date and time for database
+  const combineDateAndTime = (date: Date, time: Date, isEndTime: boolean = false): Date => {
+    const result = new Date(date);
+    
+    // Set the hours, minutes, seconds from the time
+    result.setHours(
+      time.getHours(),
+      time.getMinutes(),
+      time.getSeconds(),
+      time.getMilliseconds()
+    );
+    
+    // Check if this is an end time and if it's earlier than the start time
+    // which would indicate it's on the next day
+    if (isEndTime && pastEntryStartTime && time.getHours() < pastEntryStartTime.getHours()) {
+      // Add one day to the date for the end time
+      result.setDate(result.getDate() + 1);
+    }
+    
+    return result;
+  };
+
+  // Create a past time entry
+  const createPastTimeEntry = async () => {
+    // Check for required fields
+    if (!pastEntryDate) {
+      toast.current?.show({
+        severity: 'warn',
+        summary: 'Missing Date',
+        detail: 'Please select a date for this time entry',
+        life: 3000
+      });
+      return;
+    }
+    
+    if (!pastEntryStartTime || !pastEntryEndTime) {
+      toast.current?.show({
+        severity: 'warn',
+        summary: 'Missing Time',
+        detail: 'Please select both start and end times',
+        life: 3000
+      });
+      return;
+    }
+    
+    if (!pastEntryTask) {
+      toast.current?.show({
+        severity: 'warn',
+        summary: 'Missing Task',
+        detail: 'Please select a task for this time entry',
+        life: 3000
+      });
+      return;
+    }
+    
+    // Generate the full date-time objects
+    const now = new Date();
+    const startDateTime = combineDateAndTime(pastEntryDate, pastEntryStartTime);
+    const endDateTime = combineDateAndTime(pastEntryDate, pastEntryEndTime, true);
+    
+    // Calculate the actual duration (this will work even across midnight)
+    const actualDurationSeconds = Math.floor((endDateTime.getTime() - startDateTime.getTime()) / 1000);
+    
+    if (actualDurationSeconds <= 0) {
+      toast.current?.show({
+        severity: 'warn',
+        summary: 'Invalid Duration',
+        detail: 'End time must be after start time',
+        life: 3000
+      });
+      return;
+    }
+    
+    // Check if dates are in the future
+    if (startDateTime > now || endDateTime > now) {
+      toast.current?.show({
+        severity: 'warn',
+        summary: 'Future Dates Not Allowed',
+        detail: 'Time entries cannot be in the future',
+        life: 3000
+      });
+      return;
+    }
+    
+    try {
+      setCreatingPastEntry(true);
+      
+      // Prepare the time entry data
+      const timeEntryData = {
+        task_id: pastEntryTask.id,
+        start_time: startDateTime.toISOString(),
+        end_time: endDateTime.toISOString(),
+        duration: actualDurationSeconds,
+        description: pastEntryDescription || ''
+      };
+      
+      console.log('Creating time entry:', {
+        startDate: startDateTime.toLocaleDateString(),
+        startTime: startDateTime.toLocaleTimeString(),
+        endDate: endDateTime.toLocaleDateString(),
+        endTime: endDateTime.toLocaleTimeString(),
+        duration: `${Math.floor(actualDurationSeconds / 3600)}h ${Math.floor((actualDurationSeconds % 3600) / 60)}m`
+      });
+      
+      // Send to the API
+      await axios.post('/api/time-entries', timeEntryData);
+      
+      // Show success message
+      toast.current?.show({
+        severity: 'success',
+        summary: 'Entry Created',
+        detail: 'Past time entry was successfully created',
+        life: 3000
+      });
+      
+      // Close dialog and refresh
+      setShowPastEntryDialog(false);
+      
+      // Refresh data
+      fetchProjectsAndTasks();
+      
+      // Dispatch custom event to update dashboard charts
+      window.dispatchEvent(new CustomEvent('timeEntryCreated'));
+    } catch (error) {
+      console.error('Error creating past time entry:', error);
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to create time entry. Please try again.',
+        life: 3000
+      });
+    } finally {
+      setCreatingPastEntry(false);
+    }
+  };
+
+  // Format time for display
+  const formatTimeForDisplay = (date: Date): string => {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  // Format duration for display
+  const formatDurationForDisplay = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    return `${hours}h ${minutes}m`;
+  };
+
+  // Dialog footer for past entry
+  const pastEntryDialogFooter = (
+    <>
+      <Button 
+        label="Cancel" 
+        icon="pi pi-times" 
+        onClick={() => setShowPastEntryDialog(false)} 
+        className="p-button-text" 
+        disabled={creatingPastEntry}
+      />
+      <Button 
+        label="Create" 
+        icon="pi pi-check" 
+        onClick={createPastTimeEntry} 
+        disabled={!pastEntryDate || !pastEntryStartTime || !pastEntryEndTime || !pastEntryTask || pastEntryDuration <= 0 || creatingPastEntry}
+        loading={creatingPastEntry}
+      />
+    </>
+  );
+
+  // Check if times cross midnight for display notice
+  const isCrossingMidnight = pastEntryStartTime && pastEntryEndTime && 
+    pastEntryEndTime.getHours() < pastEntryStartTime.getHours();
+
+  // Loading state
+  if (loading || !isReady) {
     return (
-      <div className="flex justify-content-center align-items-center" style={{ height: '60vh' }}>
+      <div className="flex items-center justify-center min-h-screen">
         <ProgressSpinner />
       </div>
     );
@@ -579,8 +815,6 @@ export default function TimerPage() {
       </>
     );
   }
-
-
 
   // Regular view for when no timer is running (simplified with just Quick Start UI)
   return (
@@ -751,13 +985,20 @@ export default function TimerPage() {
                 />
               </div>
               
-              <div className="col-12 mt-2">
+              <div className="col-12 mt-2 flex justify-content-between">
                 <Button
                   label="Start Timer"
                   icon="pi pi-play"
                   className="p-button-success"
                   disabled={!selectedTask}
                   onClick={handleStartTimer}
+                />
+                
+                <Button
+                  label="Add Past Entry"
+                  icon="pi pi-calendar-plus"
+                  className="p-button-outlined"
+                  onClick={openPastEntryDialog}
                 />
               </div>
             </div>
@@ -816,6 +1057,132 @@ export default function TimerPage() {
                 autoResize
                 className="w-full"
                 placeholder="Add more details about this task"
+              />
+            </div>
+          </div>
+        </Dialog>
+        
+        {/* Past Time Entry Dialog */}
+        <Dialog
+          header="Add Past Time Entry"
+          visible={showPastEntryDialog}
+          style={{ width: '500px' }}
+          modal
+          onHide={() => setShowPastEntryDialog(false)}
+          footer={pastEntryDialogFooter}
+        >
+          <div className="p-fluid">
+            <div className="field mb-4">
+              <label htmlFor="past-entry-date" className="font-medium mb-2 block">Date</label>
+              <Calendar
+                id="past-entry-date"
+                value={pastEntryDate}
+                onChange={(e) => setPastEntryDate(e.value as Date)}
+                showIcon
+                maxDate={new Date()}
+                dateFormat="yy-mm-dd"
+                className="w-full"
+                placeholder="Select a date"
+              />
+              <small className="text-color-secondary">Select the date of this activity</small>
+            </div>
+            
+            <div className="grid">
+              <div className="col-6 field mb-4">
+                <label htmlFor="past-entry-start" className="font-medium mb-2 block">Start Time</label>
+                <Calendar
+                  id="past-entry-start"
+                  value={pastEntryStartTime}
+                  onChange={(e) => setPastEntryStartTime(e.value as Date)}
+                  timeOnly
+                  hourFormat="12"
+                  className="w-full"
+                  placeholder="Select start time"
+                />
+              </div>
+              
+              <div className="col-6 field mb-4">
+                <label htmlFor="past-entry-end" className="font-medium mb-2 block">End Time</label>
+                <Calendar
+                  id="past-entry-end"
+                  value={pastEntryEndTime}
+                  onChange={(e) => setPastEntryEndTime(e.value as Date)}
+                  timeOnly
+                  hourFormat="12"
+                  className="w-full"
+                  placeholder="Select end time"
+                />
+              </div>
+            </div>
+            
+            <div className="field mb-4">
+              <label className="font-medium mb-2 block">Duration</label>
+              <div className="p-inputtext p-disabled">
+                {formatDurationForDisplay(pastEntryDuration)}
+              </div>
+              <small className="text-color-secondary">Calculated automatically based on start and end times</small>
+              
+              {isCrossingMidnight && (
+                <div className="mt-2 p-2 border-round bg-primary-50 text-primary-700 flex align-items-center">
+                  <i className="pi pi-info-circle mr-2"></i>
+                  <span>This entry crosses midnight. All time will be counted toward {pastEntryDate?.toLocaleDateString()}.</span>
+                </div>
+              )}
+            </div>
+            
+            <div className="field mb-4">
+              <label htmlFor="past-entry-project" className="font-medium mb-2 block">Project</label>
+              <Dropdown
+                id="past-entry-project"
+                value={pastEntryProject?.id}
+                options={projects.map(p => ({ label: p.name, value: p.id }))}
+                onChange={(e) => {
+                  const project = projects.find(p => p.id === e.value);
+                  setPastEntryProject(project || null);
+                  setPastEntryTask(null); // Reset task when project changes
+                }}
+                placeholder="Select Project"
+                className="w-full"
+                filter
+              />
+            </div>
+            
+            <div className="field mb-4">
+              <label htmlFor="past-entry-task" className="font-medium mb-2 block">Task</label>
+              <Dropdown
+                id="past-entry-task"
+                value={pastEntryTask?.id}
+                options={tasks
+                  .filter(t => !pastEntryProject?.id || t.project_id === pastEntryProject.id)
+                  .map(t => ({ label: t.name, value: t.id }))
+                }
+                onChange={(e) => {
+                  const task = tasks.find(t => t.id === e.value);
+                  setPastEntryTask(task || null);
+                  
+                  // Also set project if task is selected
+                  if (task && !pastEntryProject) {
+                    const project = projects.find(p => p.id === task.project_id);
+                    setPastEntryProject(project || null);
+                  }
+                }}
+                placeholder="Select Task"
+                className="w-full"
+                filter
+                disabled={!pastEntryProject}
+              />
+            </div>
+            
+            <div className="field">
+              <label htmlFor="past-entry-description" className="font-medium mb-2 block">Description (Optional)</label>
+              <InputTextarea
+                id="past-entry-description"
+                value={pastEntryDescription}
+                onChange={(e) => setPastEntryDescription(e.target.value)}
+                rows={3}
+                placeholder="What did you work on?"
+                className="w-full"
+                autoResize
               />
             </div>
           </div>
