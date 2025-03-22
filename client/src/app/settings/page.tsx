@@ -40,10 +40,6 @@ export default function SettingsPage() {
   });
   
   const [loadingSettings, setLoadingSettings] = useState(true);
-  const [savingSettings, setSavingSettings] = useState(false);
-  const [savingProfile, setSavingProfile] = useState(false);
-  const [settingsMessage, setSettingsMessage] = useState('');
-  const [profileMessage, setProfileMessage] = useState('');
   const [activeTab, setActiveTab] = useState(0);
 
   // Redirect if not logged in
@@ -85,72 +81,6 @@ export default function SettingsPage() {
     }
   }, [user]);
 
-  const handleSettingsChange = (key: keyof UserSettings, value: string | number | boolean) => {
-    setSettings((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
-  };
-
-  const handleProfileChange = (key: string, value: string) => {
-    setProfile((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
-  };
-
-  const saveSettings = async () => {
-    try {
-      setSavingSettings(true);
-      setSettingsMessage('');
-      
-      await axios.put('/api/users/settings', settings);
-      
-      setSettingsMessage('Settings saved successfully');
-      
-      // Apply theme immediately
-      document.documentElement.classList.remove('dark', 'light');
-      document.documentElement.classList.add(settings.theme);
-    } catch (error) {
-      console.error('Error saving settings', error);
-      setSettingsMessage('Error saving settings');
-    } finally {
-      setSavingSettings(false);
-    }
-  };
-
-  const saveProfile = async () => {
-    try {
-      setSavingProfile(true);
-      setProfileMessage('');
-      
-      await axios.put('/api/users/profile', profile);
-      
-      setProfileMessage('Profile saved successfully');
-    } catch (error) {
-      console.error('Error saving profile', error);
-      setProfileMessage('Error saving profile');
-    } finally {
-      setSavingProfile(false);
-    }
-  };
-
-  // Options for dropdowns
-  const themeOptions = [
-    { label: 'Light', value: 'light' },
-    { label: 'Dark', value: 'dark' }
-  ];
-
-  const hourFormatOptions = [
-    { label: '12-hour (AM/PM)', value: '12h' },
-    { label: '24-hour', value: '24h' }
-  ];
-
-  const weekStartOptions = [
-    { label: 'Sunday', value: 0 },
-    { label: 'Monday', value: 1 }
-  ];
-
   if (loading || loadingSettings) {
     return (
       <div className="flex justify-content-center align-items-center" style={{ height: '60vh' }}>
@@ -167,8 +97,12 @@ export default function SettingsPage() {
         <InputText
           id="name"
           value={profile.name}
-          onChange={(e) => handleProfileChange('name', e.target.value)}
+          disabled
+          className="opacity-70"
         />
+        <small className="text-color-secondary block mt-1">
+          Profile information cannot be changed.
+        </small>
       </div>
       
       <div className="field mb-4">
@@ -183,61 +117,6 @@ export default function SettingsPage() {
           Email cannot be changed. It is managed by your authentication provider.
         </small>
       </div>
-      
-      {profileMessage && (
-        <Message 
-          severity={profileMessage.includes('Error') ? 'error' : 'success'} 
-          text={profileMessage}
-          className="w-full mb-4"
-        />
-      )}
-      
-      <Button 
-        label="Save Profile" 
-        icon="pi pi-save" 
-        onClick={saveProfile}
-        loading={savingProfile}
-      />
-    </div>
-  );
-
-  // App settings tab
-  const AppSettings = () => (
-    <div className="p-fluid">
-      <div className="field mb-4">
-        <label htmlFor="theme" className="font-medium mb-2 block">Theme</label>
-        <Dropdown
-          id="theme"
-          value={settings.theme}
-          options={themeOptions}
-          onChange={(e) => handleSettingsChange('theme', e.value)}
-          className="w-full"
-        />
-      </div>
-      
-      <div className="field-checkbox mb-4">
-        <Checkbox
-          inputId="notifications"
-          checked={settings.notification_enabled}
-          onChange={(e) => handleSettingsChange('notification_enabled', e.checked!)}
-        />
-        <label htmlFor="notifications" className="ml-2">Enable notifications</label>
-      </div>
-      
-      {settingsMessage && (
-        <Message 
-          severity={settingsMessage.includes('Error') ? 'error' : 'success'} 
-          text={settingsMessage}
-          className="w-full mb-4"
-        />
-      )}
-      
-      <Button 
-        label="Save Settings" 
-        icon="pi pi-save" 
-        onClick={saveSettings}
-        loading={savingSettings}
-      />
     </div>
   );
 
@@ -258,31 +137,6 @@ export default function SettingsPage() {
     </div>
   );
 
-  // Data export tab
-  const DataExport = () => (
-    <div>
-      <p className="mb-4 line-height-3">
-        You can export your time tracking data for backup or analysis.
-      </p>
-      
-      <div className="flex flex-column gap-2">
-        <Button 
-          label="Export as CSV" 
-          icon="pi pi-file" 
-          className="p-button-outlined"
-          onClick={() => alert('Feature coming soon!')}
-        />
-        
-        <Button 
-          label="Export as JSON" 
-          icon="pi pi-file" 
-          className="p-button-outlined"
-          onClick={() => alert('Feature coming soon!')}
-        />
-      </div>
-    </div>
-  );
-
   // For mobile view, use tabview 
   const mobileView = () => {
     return (
@@ -290,14 +144,8 @@ export default function SettingsPage() {
         <TabPanel header="Profile">
           <ProfileSettings />
         </TabPanel>
-        <TabPanel header="App Settings">
-          <AppSettings />
-        </TabPanel>
         <TabPanel header="Account">
           <AccountSettings />
-        </TabPanel>
-        <TabPanel header="Data">
-          <DataExport />
         </TabPanel>
       </TabView>
     );
@@ -314,20 +162,8 @@ export default function SettingsPage() {
         </div>
         
         <div className="col-12 md:col-6">
-          <Card title="App Settings" className="h-full">
-            <AppSettings />
-          </Card>
-        </div>
-        
-        <div className="col-12 md:col-6">
           <Card title="Account" className="h-full">
             <AccountSettings />
-          </Card>
-        </div>
-        
-        <div className="col-12 md:col-6">
-          <Card title="Data" className="h-full">
-            <DataExport />
           </Card>
         </div>
       </div>
