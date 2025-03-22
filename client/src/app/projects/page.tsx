@@ -384,14 +384,13 @@ export default function ProjectsPage() {
   const header = (
     <div className="flex flex-column md:flex-row md:justify-content-between md:align-items-center">
       <h5 className="m-0">Manage Projects</h5>
-      <span className="p-input-icon-left">
-        <i className="pi pi-search" />
+
         <InputText 
           type="search" 
           onInput={(e) => setGlobalFilter((e.target as HTMLInputElement).value)} 
           placeholder="Search..." 
         />
-      </span>
+
     </div>
   );
 
