@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
@@ -55,6 +56,9 @@ export default function RecentActivityTable() {
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<number | null>(null);
+  const [editingEntry, setEditingEntry] = useState<number | null>(null);
+  const [editingDescription, setEditingDescription] = useState<string>('');
+  const [savingDescription, setSavingDescription] = useState(false);
   const [filters, setFilters] = useState<DataTableFilterMeta>({
     global: { value: null, matchMode: 'contains' },
     project_name: { value: null, matchMode: 'contains' },
@@ -397,7 +401,100 @@ export default function RecentActivityTable() {
     });
   };
 
+  const updateTimeEntryDescription = async (entryId: number, description: string) => {
+    if (!token) {
+      console.error('No authentication token available for updating');
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Authentication Error',
+        detail: 'Please log in again to update time entries',
+        life: 3000
+      });
+      return;
+    }
+    
+    try {
+      setSavingDescription(true);
+      
+      // Update the time entry on the server
+      await axios.put(`/api/time-entries/${entryId}`, 
+        { description },
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          timeout: 5000
+        }
+      );
+      
+      // Update local state
+      setRecentActivity(prev => 
+        prev.map(entry => 
+          entry.id === entryId 
+            ? { ...entry, description } 
+            : entry
+        )
+      );
+      
+      // Exit edit mode
+      setEditingEntry(null);
+      setEditingDescription('');
+      
+      // Show success message
+      toast.current?.show({
+        severity: 'success',
+        summary: 'Success',
+        detail: 'Time entry description updated successfully',
+        life: 3000
+      });
+    } catch (error) {
+      console.error('Error updating time entry:', error);
+      
+      // Check if it's a network error
+      if (axios.isAxiosError(error) && !error.response) {
+        toast.current?.show({
+          severity: 'error',
+          summary: 'Connection Error',
+          detail: 'Unable to connect to the server. Please try again later.',
+          life: 5000
+        });
+      } else if (axios.isAxiosError(error) && error.response?.status === 401) {
+        toast.current?.show({
+          severity: 'error',
+          summary: 'Authentication Error',
+          detail: 'Your session has expired. Please log in again.',
+          life: 3000
+        });
+      } else {
+        toast.current?.show({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Failed to update time entry. Please try again.',
+          life: 3000
+        });
+      }
+    } finally {
+      setSavingDescription(false);
+    }
+  };
+
   const rowExpansionTemplate = (data: RecentActivity) => {
+    const isEditing = editingEntry === data.id;
+    
+    const handleEditClick = () => {
+      setEditingEntry(data.id);
+      setEditingDescription(data.description || '');
+    };
+    
+    const handleCancelEdit = () => {
+      setEditingEntry(null);
+      setEditingDescription('');
+    };
+    
+    const handleSaveDescription = () => {
+      updateTimeEntryDescription(data.id, editingDescription);
+    };
+    
     return (
       <div className="p-3">
         <h5>Details</h5>
@@ -433,21 +530,64 @@ export default function RecentActivityTable() {
                 <span>{formatTime(data.duration)}</span>
               </div>
               <div>
-                <span className="font-semibold mb-2">Description:</span>
-                <div className="p-2 border-1 surface-border border-round mt-2">
-                  {data.description || 'No description provided'}
+                <div className="flex justify-content-between align-items-center mb-2">
+                  <span className="font-semibold">Description:</span>
+                  {!isEditing && (
+                    <Button 
+                      icon="pi pi-pencil" 
+                      className="p-button-rounded p-button-text p-button-sm" 
+                      onClick={handleEditClick}
+                      tooltip="Edit description"
+                      tooltipOptions={{ position: 'top' }}
+                    />
+                  )}
                 </div>
+                
+                {isEditing ? (
+                  <div className="flex flex-column">
+                    <InputText 
+                      value={editingDescription} 
+                      onChange={(e) => setEditingDescription(e.target.value)}
+                      autoFocus
+                      className="mb-2"
+                      placeholder="Enter a description"
+                    />
+                    <div className="flex justify-content-end gap-2 mt-2">
+                      <Button 
+                        label="Cancel" 
+                        icon="pi pi-times" 
+                        className="p-button-outlined p-button-sm"
+                        onClick={handleCancelEdit}
+                        disabled={savingDescription}
+                      />
+                      <Button 
+                        label="Save" 
+                        icon="pi pi-check" 
+                        className="p-button-sm"
+                        onClick={handleSaveDescription}
+                        loading={savingDescription}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-2 border-1 surface-border border-round">
+                    {data.description || 'No description provided'}
+                  </div>
+                )}
               </div>
-              <div className="mt-3 flex justify-content-end">
-                <Button
-                  label="Delete Entry"
-                  icon="pi pi-trash"
-                  className="p-button-danger p-button-sm"
-                  onClick={() => confirmDelete(data.id, data.task_name)}
-                  loading={deleting === data.id}
-                  disabled={deleting !== null}
-                />
-              </div>
+              
+              {!isEditing && (
+                <div className="mt-3 flex justify-content-end">
+                  <Button
+                    label="Delete Entry"
+                    icon="pi pi-trash"
+                    className="p-button-danger p-button-sm"
+                    onClick={() => confirmDelete(data.id, data.task_name)}
+                    loading={deleting === data.id}
+                    disabled={deleting !== null || savingDescription}
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>

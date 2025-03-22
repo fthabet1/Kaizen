@@ -758,7 +758,7 @@ export default function DailyActivityGraph() {
                         width: '160px',
                         fontFamily: 'Inter, system-ui, sans-serif',
                         position: 'relative',
-                        transform: 'translate(-56%, -100%)'
+                        transform: `translate(-50%, -${Math.min(((item.totalTime) / 3600 * 2.5), 25)}px)`
                       }}
                     >
                       {/* Arrow pointing to the bar */}
@@ -810,7 +810,7 @@ export default function DailyActivityGraph() {
                 }}
                 cursor={false}
                 offset={0}
-                position={{ x: 0, y: -10 }}
+                position={{ x: undefined, y: 0 }}
                 wrapperStyle={{ 
                   zIndex: 1000, 
                   pointerEvents: 'none'
