@@ -102,30 +102,31 @@ export default function Header() {
     <>
       {user && (
         <div className="sidebar-container" style={{ zIndex: 9999 }}>
-          {sidebarVisible && (
-            <div 
-              className="fixed inset-0 bg-black bg-opacity-50"
-              onClick={closeSidebar}
-              style={{ 
-                left: collapsed ? '5rem' : '18rem',
-                zIndex: 9998
-              }}
-            ></div>
-          )}
+          <div 
+            className={`fixed inset-0 bg-black bg-opacity-50 transition-opacity duration-500 ease-in-out ${
+              sidebarVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
+            }`}
+            onClick={closeSidebar}
+            style={{ 
+              left: collapsed ? '5rem' : '18rem',
+              zIndex: 9998
+            }}
+          ></div>
           
           <div 
-            className={`fixed inset-y-0 left-0 transform ${
-              sidebarVisible ? 'translate-x-0' : '-translate-x-full'
-            } transition-transform duration-300 ease-in-out`}
-            style={{ zIndex: 9999 }}
+            className="fixed inset-y-0 left-0 transform transition-all duration-500 ease-in-out"
+            style={{ 
+              zIndex: 9999,
+              transform: sidebarVisible ? 'translateX(0)' : 'translateX(-100%)',
+              boxShadow: sidebarVisible ? '4px 0 15px rgba(0, 0, 0, 0.15)' : 'none',
+              willChange: 'transform'
+            }}
           >
-            {sidebarVisible && (
-              <Sidebar 
-                onClose={closeSidebar}
-                collapsed={collapsed}
-                onCollapseToggle={toggleCollapsedState}
-              />
-            )}
+            <Sidebar 
+              onClose={closeSidebar}
+              collapsed={collapsed}
+              onCollapseToggle={toggleCollapsedState}
+            />
           </div>
         </div>
       )}
