@@ -5,6 +5,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import axios from '../utils/axiosConfig';
 import { useAuth } from './AuthContexts';
+import { parseISOWithTimezone, toUTCString, getLocalTimezoneName } from '../utils/dateUtils';
 
 interface Task {
   id: number;
@@ -53,17 +54,21 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   const [description, setDescription] = useState('');
   const [timerInterval, setTimerInterval] = useState<NodeJS.Timeout | null>(null);
   const [activeTimeEntryId, setActiveTimeEntryId] = useState<number | null>(null);
-  const { user } = useAuth();
+  const { user, token, isReady } = useAuth();
   const [isInitialized, setIsInitialized] = useState(false);
 
   // Load active timer from API on init
   useEffect(() => {
-    if (user) {
+    if (isReady && user && token) {
       // Check if there's an active timer in the database
       const checkActiveTimer = async () => {
         try {
           console.log('Checking for active timer in database...');
-          const response = await axios.get('/api/time-entries/active');
+          const response = await axios.get('/api/time-entries/active', {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
           
           if (response.data) {
             console.log('Found active timer in database:', response.data);
@@ -82,9 +87,22 @@ export function TimerProvider({ children }: { children: ReactNode }) {
               color: activeEntry.project_color
             });
             
-            setStartTime(new Date(activeEntry.start_time));
+            // Use our improved date parser that handles timezone properly
+            const startTimeDate = parseISOWithTimezone(activeEntry.start_time);
+            console.log('Loaded start time from API (UTC):', activeEntry.start_time);
+            console.log('Parsed start time (local):', startTimeDate.toString());
+            console.log('Current time (local):', new Date().toString());
+            console.log('Timezone offset (minutes):', new Date().getTimezoneOffset());
+            console.log('Browser timezone:', getLocalTimezoneName());
+            
+            setStartTime(startTimeDate);
             setDescription(activeEntry.description || '');
             setIsRunning(true);
+            
+            // Immediately calculate the elapsed time based on the loaded start time
+            const now = new Date();
+            const calculatedElapsedTime = Math.max(0, Math.floor((now.getTime() - startTimeDate.getTime()) / 1000));
+            setElapsedTime(calculatedElapsedTime);
             
             // Save to localStorage as backup
             if (user.uid) {
@@ -116,7 +134,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       
       checkActiveTimer();
     }
-  }, [user]);
+  }, [isReady, user, token]);
 
   const loadFromLocalStorage = async () => {
     if (!user || !user.uid) return;
@@ -130,7 +148,13 @@ export function TimerProvider({ children }: { children: ReactNode }) {
           startTimeStr, description: savedDescription, timeEntryId 
         } = JSON.parse(savedTimer);
         
-        const parsedStartTime = new Date(startTimeStr);
+        // Parse the start time with proper timezone handling
+        console.log('Start time from localStorage (should be UTC):', startTimeStr);
+        const parsedStartTime = parseISOWithTimezone(startTimeStr);
+        console.log('Parsed start time (converted to local):', parsedStartTime.toString());
+        console.log('Current time (local):', new Date().toString());
+        console.log('Timezone offset (minutes):', new Date().getTimezoneOffset());
+        console.log('Browser timezone:', getLocalTimezoneName());
         
         // Only restore if it's a valid date
         if (!isNaN(parsedStartTime.getTime())) {
@@ -141,6 +165,11 @@ export function TimerProvider({ children }: { children: ReactNode }) {
           setStartTime(parsedStartTime);
           setDescription(savedDescription || '');
           setIsRunning(true);
+          
+          // Immediately calculate elapsed time based on the loaded start time
+          const now = new Date();
+          const calculatedElapsedTime = Math.max(0, Math.floor((now.getTime() - parsedStartTime.getTime()) / 1000));
+          setElapsedTime(calculatedElapsedTime);
           
           if (timeEntryId) {
             setActiveTimeEntryId(timeEntryId);
@@ -168,7 +197,11 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   // Verify that a time entry is still active in the database
   const verifyActiveTimeEntry = async (entryId: number) => {
     try {
-      const response = await axios.get(`/api/time-entries/${entryId}`);
+      const response = await axios.get(`/api/time-entries/${entryId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       if (response.data && !response.data.end_time) {
         console.log('Verified time entry is still active:', response.data);
         // Entry is still active, everything is good
@@ -186,8 +219,8 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   
   // Create a new time entry with the current timer state
   const restartTimerWithNewEntry = async () => {
-    if (!currentTask || !currentProject || !startTime) {
-      console.error('Cannot restart timer: missing task, project, or start time');
+    if (!currentTask || !currentProject || !startTime || !token) {
+      console.error('Cannot restart timer: missing task, project, start time, or token');
       return;
     }
     
@@ -195,14 +228,25 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       console.log('Creating new time entry to continue timing');
       const timeEntryPayload = {
         task_id: currentTask.id,
-        start_time: startTime.toISOString(),
+        start_time: toUTCString(startTime),
         description: description || ''
       };
       
-      const response = await axios.post('/api/time-entries', timeEntryPayload);
+      const response = await axios.post('/api/time-entries', timeEntryPayload, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       console.log('New time entry created:', response.data);
       
       setActiveTimeEntryId(response.data.id);
+      
+      // Calculate and set elapsed time
+      if (startTime) {
+        const now = new Date();
+        const calculatedElapsedTime = Math.max(0, Math.floor((now.getTime() - startTime.getTime()) / 1000));
+        setElapsedTime(calculatedElapsedTime);
+      }
       
       // Update localStorage with new time entry ID
       if (user && user.uid) {
@@ -212,7 +256,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
           projectId: currentProject.id,
           projectName: currentProject.name,
           projectColor: currentProject.color,
-          startTimeStr: startTime.toISOString(),
+          startTimeStr: toUTCString(startTime),
           description,
           timeEntryId: response.data.id
         }));
@@ -224,32 +268,30 @@ export function TimerProvider({ children }: { children: ReactNode }) {
 
   // Set up timer interval when running
   useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    
     if (isRunning && startTime) {
-      // Clear any existing interval
-      if (timerInterval) {
-        clearInterval(timerInterval);
-      }
-      
       // Create new interval to update elapsed time every second
-      const interval = setInterval(() => {
+      interval = setInterval(() => {
         const now = new Date();
-        const seconds = Math.floor((now.getTime() - startTime.getTime()) / 1000);
+        // Calculate elapsed time directly
+        const seconds = Math.max(0, Math.floor((now.getTime() - startTime.getTime()) / 1000));
         setElapsedTime(seconds);
       }, 1000);
       
-      setTimerInterval(interval);
-      
       // Initial calculation
       const now = new Date();
-      const seconds = Math.floor((now.getTime() - startTime.getTime()) / 1000);
+      const seconds = Math.max(0, Math.floor((now.getTime() - startTime.getTime()) / 1000));
       setElapsedTime(seconds);
-      
-      return () => clearInterval(interval);
-    } else if (timerInterval) {
-      clearInterval(timerInterval);
-      setTimerInterval(null);
     }
-  }, [isRunning, startTime, timerInterval]);
+    
+    // Cleanup function
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
+  }, [isRunning, startTime]); // Only depend on isRunning and startTime
 
   // Save timer to localStorage when it changes
   useEffect(() => {
@@ -260,7 +302,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         projectId: currentProject.id,
         projectName: currentProject.name,
         projectColor: currentProject.color,
-        startTimeStr: startTime.toISOString(),
+        startTimeStr: toUTCString(startTime),
         description,
         timeEntryId: activeTimeEntryId
       };
@@ -310,13 +352,26 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         await stopTimer();
       }
       
+      if (!token) {
+        console.error('Cannot start timer: missing authentication token');
+        throw new Error('Authentication token is missing');
+      }
+      
       console.log('Fetching task and project details...');
       // Get task and project details
       let taskResponse, projectResponse;
       try {
         [taskResponse, projectResponse] = await Promise.all([
-          axios.get(`/api/tasks/${taskId}`),
-          axios.get(`/api/projects/${projectId}`)
+          axios.get(`/api/tasks/${taskId}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          }),
+          axios.get(`/api/projects/${projectId}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          })
         ]);
         
         console.log('Successfully fetched task:', taskResponse.data);
@@ -335,7 +390,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       
       const newTimeEntry = {
         task_id: taskId,
-        start_time: now.toISOString(),
+        start_time: toUTCString(now),
         description: taskDescription || ''
       };
       
@@ -345,7 +400,11 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       let timeEntryResponse;
       try {
         console.log('Sending POST request to /api/time-entries');
-        timeEntryResponse = await axios.post('/api/time-entries', newTimeEntry);
+        timeEntryResponse = await axios.post('/api/time-entries', newTimeEntry, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
         console.log('Time entry created successfully:', timeEntryResponse.data);
         
         // Save the time entry ID
@@ -385,6 +444,11 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       return;
     }
     
+    if (!token) {
+      console.error('Cannot stop timer: missing authentication token');
+      throw new Error('Authentication token is missing');
+    }
+    
     console.log('---- STOP TIMER DEBUGGING ----');
     console.log('Stopping timer for task:', currentTask.id);
     
@@ -399,14 +463,18 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         
         // Update the time entry with end time and duration
         const updatePayload = {
-          end_time: endTime.toISOString(),
+          end_time: toUTCString(endTime),
           duration,
           description
         };
         console.log('Updating time entry with:', JSON.stringify(updatePayload));
         
         try {
-          await axios.put(`/api/time-entries/${activeTimeEntryId}`, updatePayload);
+          await axios.put(`/api/time-entries/${activeTimeEntryId}`, updatePayload, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
           console.log('Time entry updated successfully');
         } catch (error) {
           console.error('Error updating time entry:', error);
@@ -428,6 +496,9 @@ export function TimerProvider({ children }: { children: ReactNode }) {
             params: {
               task_id: currentTask.id,
               is_active: true
+            },
+            headers: {
+              'Authorization': `Bearer ${token}`
             }
           });
           console.log('Active entries response:', response.data);
@@ -438,14 +509,18 @@ export function TimerProvider({ children }: { children: ReactNode }) {
             
             // Update the time entry with end time and duration
             const updatePayload = {
-              end_time: endTime.toISOString(),
+              end_time: toUTCString(endTime),
               duration,
               description
             };
             console.log('Updating time entry with:', JSON.stringify(updatePayload));
             
             try {
-              await axios.put(`/api/time-entries/${activeEntry.id}`, updatePayload);
+              await axios.put(`/api/time-entries/${activeEntry.id}`, updatePayload, {
+                headers: {
+                  'Authorization': `Bearer ${token}`
+                }
+              });
               console.log('Time entry updated successfully');
             } catch (error) {
               console.error('Error updating time entry:', error);
@@ -490,8 +565,12 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     }
     
     // If we have an active time entry ID, delete it
-    if (activeTimeEntryId) {
-      axios.delete(`/api/time-entries/${activeTimeEntryId}`)
+    if (activeTimeEntryId && token) {
+      axios.delete(`/api/time-entries/${activeTimeEntryId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
         .catch(error => console.error('Error deleting time entry:', error));
     }
     
@@ -523,13 +602,29 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       throw new Error('No active timer to adjust');
     }
     
+    if (!token) {
+      console.error('Cannot adjust start time: missing authentication token');
+      throw new Error('Authentication token is missing');
+    }
+    
     try {
+      console.log('=== ADJUST START TIME DEBUG ===');
+      console.log('New start time (local):', newStartTime.toString());
+      console.log('New start time as ISO/UTC string:', toUTCString(newStartTime));
+      console.log('Current time (local):', new Date().toString());
+      console.log('Timezone offset (minutes):', new Date().getTimezoneOffset());
+      console.log('Browser timezone:', getLocalTimezoneName());
+      
       // Find the active time entry
       let entryId = activeTimeEntryId;
       
       if (!entryId) {
         // Try to get it from the API
-        const response = await axios.get('/api/time-entries/active');
+        const response = await axios.get('/api/time-entries/active', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
         if (response.data) {
           entryId = response.data.id;
           setActiveTimeEntryId(entryId);
@@ -541,8 +636,16 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       }
       
       // Update the time entry with the new start time
+      // Convert local time to UTC ISO string for the server
+      const utcStartTimeStr = toUTCString(newStartTime);
+      console.log('Sending to server (UTC ISO):', utcStartTimeStr);
+      
       await axios.put(`/api/time-entries/${entryId}`, {
-        start_time: newStartTime.toISOString()
+        start_time: utcStartTimeStr
+      }, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       });
       
       // Update the local state
@@ -561,7 +664,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
           projectId: currentProject.id,
           projectName: currentProject.name,
           projectColor: currentProject.color,
-          startTimeStr: newStartTime.toISOString(),
+          startTimeStr: utcStartTimeStr,
           description,
           timeEntryId: entryId
         }));

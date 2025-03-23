@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable react-hooks/exhaustive-deps */
 'use client';
 
@@ -17,6 +18,7 @@ import {
   startOfMonth, endOfMonth, subMonths, subWeeks,
   startOfYear, endOfYear
 } from 'date-fns';
+import { formatDateForDisplay, parseISOWithTimezone } from '../../utils/dateUtils';
 
 // PrimeReact imports
 import { Card } from 'primereact/card';
@@ -230,8 +232,8 @@ export default function ReportsPage() {
       }
       
       // Format dates for API - ensure UTC consistency
-      const formattedStartDate = format(startDate, 'yyyy-MM-dd');
-      const formattedEndDate = format(endDate, 'yyyy-MM-dd');
+      const formattedStartDate = format(startDate, 'yyyy-MM-dd\'T\'HH:mm:ss');
+      const formattedEndDate = format(endDate, 'yyyy-MM-dd\'T\'HH:mm:ss');
       
       console.log('Fetching data for:', { 
         range: dateRange,
@@ -381,7 +383,7 @@ export default function ReportsPage() {
 
   const dateTemplate = (rowData: TimeEntry) => {
     try {
-      return format(parseISO(rowData.start_time), 'MMM d, yyyy');
+      return format(parseISOWithTimezone(rowData.start_time), 'MMM d, yyyy');
     } catch (error) {
       console.error('Error formatting date:', error);
       return 'Invalid date';
@@ -390,7 +392,7 @@ export default function ReportsPage() {
 
   const timeTemplate = (rowData: TimeEntry) => {
     try {
-      return `${format(parseISO(rowData.start_time), 'h:mm a')} - ${rowData.end_time ? format(parseISO(rowData.end_time), 'h:mm a') : 'In Progress'}`;
+      return `${format(parseISOWithTimezone(rowData.start_time), 'h:mm a')} - ${rowData.end_time ? format(parseISOWithTimezone(rowData.end_time), 'h:mm a') : 'In Progress'}`;
     } catch (error) {
       console.error('Error formatting time:', error);
       return 'Invalid time';
@@ -405,10 +407,9 @@ export default function ReportsPage() {
   const safeDateFormat = (dateString: string | undefined, formatString: string): string => {
     if (!dateString) return '';
     try {
-      const date = parseISO(dateString);
-      if (isNaN(date.getTime())) return '';
-      return format(date, formatString);
-    } catch {
+      return format(parseISOWithTimezone(dateString), formatString);
+    } catch (error) {
+      console.error('Error formatting date for chart:', error);
       return '';
     }
   };
@@ -522,243 +523,6 @@ export default function ReportsPage() {
               {stats && stats.projectStats ? stats.projectStats.length : 0}
             </div>
             <div className="text-sm text-color-secondary mt-1">Active</div>
-          </Card>
-        </div>
-      </div>
-
-      {/* Charts Section */}
-      <div className="grid mb-4">
-        {/* Daily Activity Chart */}
-        <div className="col-12 lg:col-6">
-          <Card title="Daily Activity" className="h-full">
-            <div className="h-20rem">
-              {stats && stats.dailyStats && stats.dailyStats.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={stats.dailyStats}
-                    margin={{ top: 10, right: 10, left: 20, bottom: 20 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis 
-                      dataKey="date" 
-                      tickFormatter={(date) => {
-                        // Format based on date range
-                        if (dateRange === 'today' || dateRange === 'yesterday') {
-                          return format(parseISO(date), 'h a'); // Hour format for single day
-                        } else if (dateRange === 'week' || dateRange === 'last_week') {
-                          return format(parseISO(date), 'EEE'); // Day name for week
-                        } else if (dateRange === 'month' || dateRange === 'last_month') {
-                          return format(parseISO(date), 'd'); // Day number for month
-                        } else if (dateRange === 'year') {
-                          return format(parseISO(date), 'MMM'); // Month name for year
-                        } else if (dateRange === 'custom') {
-                          // For custom, decide based on range length
-                          const days = Math.round((customDateRange.endDate.getTime() - customDateRange.startDate.getTime()) / (1000 * 3600 * 24));
-                          if (days <= 1) return format(parseISO(date), 'h a');
-                          if (days <= 7) return format(parseISO(date), 'EEE');
-                          if (days <= 31) return format(parseISO(date), 'd');
-                          if (days <= 365) return format(parseISO(date), 'MMM');
-                          return format(parseISO(date), 'MMM yyyy');
-                        } else {
-                          return format(parseISO(date), 'MMM d'); // Default format
-                        }
-                      }}
-                      tick={{ fontSize: 12 }}
-                      tickMargin={10}
-                      interval={0}
-                      padding={{ left: 10, right: 10 }}
-                      type="category"
-                    />
-                    <YAxis 
-                      tickFormatter={(seconds) => `${Math.floor(seconds / 3600)}h`}
-                      tick={{ fontSize: 12 }}
-                    />
-                    <Tooltip 
-                      formatter={(value: number) => [formatTime(value), 'Time Tracked']}
-                      labelFormatter={(date) => {
-                        if (!date) return '';
-                        try {
-                          const dateObj = parseISO(date as string);
-                          if (dateRange === 'today' || dateRange === 'yesterday') {
-                            return format(dateObj, 'MMMM d, yyyy h:mm a');
-                          }
-                          return format(dateObj, 'MMMM d, yyyy');
-                        } catch {
-                          return '';
-                        }
-                      }}
-                      contentStyle={{ fontSize: '12px' }}
-                    />
-                    <Bar 
-                      dataKey="totalTime" 
-                      fill="var(--primary-color)" 
-                      radius={[4, 4, 0, 0]}
-                      maxBarSize={getBarSize()}
-                      name="Time Tracked"
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex flex-column align-items-center justify-content-center h-full text-color-secondary p-4">
-                  <i className="pi pi-chart-bar text-xl mb-3 opacity-60"></i>
-                  <span>No daily activity data available</span>
-                  <span className="text-xs mt-2">Try selecting a different date range</span>
-                </div>
-              )}
-            </div>
-          </Card>
-        </div>
-
-        {/* Project Distribution Chart */}
-        <div className="col-12 lg:col-6">
-          <Card title="Project Distribution" className="h-full">
-            <div className="h-20rem">
-              {stats && stats.projectStats && stats.projectStats.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={stats.projectStats}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      outerRadius={80}
-                      innerRadius={30}
-                      dataKey="totalTime"
-                      nameKey="name"
-                      label={({ name, percent }) => 
-                        percent > 0.05 ? `${name}: ${(percent * 100).toFixed(0)}%` : ''
-                      }
-                      paddingAngle={2}
-                    >
-                      {stats.projectStats.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color || `hsl(${index * 45 % 360}, 70%, 60%)`} />
-                      ))}
-                    </Pie>
-                    <Tooltip 
-                      formatter={(value: number) => [formatTime(value), 'Time Tracked']}
-                      contentStyle={{ fontSize: '12px' }}
-                    />
-                    <Legend 
-                      layout="vertical" 
-                      verticalAlign="middle" 
-                      align="right"
-                      wrapperStyle={{ fontSize: '12px' }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex flex-column align-items-center justify-content-center h-full text-color-secondary p-4">
-                  <i className="pi pi-chart-pie text-xl mb-3 opacity-60"></i>
-                  <span>No project data available</span>
-                  <span className="text-xs mt-2">Try selecting a different date range</span>
-                </div>
-              )}
-            </div>
-          </Card>
-        </div>
-
-        {/* Weekly Trend Chart */}
-        <div className="col-12 lg:col-6">
-          <Card title="Weekly Trend" className="h-full">
-            <div className="h-20rem">
-              {stats && stats.weeklyStats && stats.weeklyStats.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart
-                    data={stats.weeklyStats}
-                    margin={{ top: 10, right: 10, left: 20, bottom: 20 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis 
-                      dataKey="weekStart" 
-                      tickFormatter={(date) => safeDateFormat(date, 'MMM d')}
-                      tick={{ fontSize: 12 }}
-                      tickMargin={10}
-                    />
-                    <YAxis 
-                      tickFormatter={(seconds) => `${Math.floor(seconds / 3600)}h`}
-                      tick={{ fontSize: 12 }}
-                    />
-                    <Tooltip 
-                      formatter={(value: number) => [formatTime(value), 'Time Tracked']}
-                      labelFormatter={(date) => {
-                        if (!date) return '';
-                        try {
-                          const startDate = parseISO(date as string);
-                          const endDate = addDays(startDate, 6);
-                          return `Week of ${format(startDate, 'MMM d')} - ${format(endDate, 'MMM d')}`;
-                        } catch {
-                          return '';
-                        }
-                      }}
-                      contentStyle={{ fontSize: '12px' }}
-                    />
-                    <Area 
-                      type="monotone" 
-                      dataKey="totalTime" 
-                      stroke="var(--primary-color)" 
-                      fill="var(--primary-color)" 
-                      fillOpacity={0.2}
-                      activeDot={{ r: 6 }}
-                      name="Time Tracked"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex flex-column align-items-center justify-content-center h-full text-color-secondary p-4">
-                  <i className="pi pi-chart-line text-xl mb-3 opacity-60"></i>
-                  <span>No weekly data available</span>
-                  <span className="text-xs mt-2">Try selecting a different date range</span>
-                </div>
-              )}
-            </div>
-          </Card>
-        </div>
-
-        {/* Monthly Trend Chart */}
-        <div className="col-12 lg:col-6">
-          <Card title="Monthly Trend" className="h-full">
-            <div className="h-20rem">
-              {stats && stats.monthlyStats && stats.monthlyStats.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart
-                    data={stats.monthlyStats}
-                    margin={{ top: 10, right: 10, left: 20, bottom: 20 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis 
-                      dataKey="month" 
-                      tickFormatter={(date) => safeDateFormat(date, 'MMM yyyy')}
-                      tick={{ fontSize: 12 }}
-                      tickMargin={10}
-                    />
-                    <YAxis 
-                      tickFormatter={(seconds) => `${Math.floor(seconds / 3600)}h`}
-                      tick={{ fontSize: 12 }}
-                    />
-                    <Tooltip 
-                      formatter={(value: number) => [formatTime(value), 'Time Tracked']}
-                      labelFormatter={(date) => safeDateFormat(date as string, 'MMMM yyyy')}
-                      contentStyle={{ fontSize: '12px' }}
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="totalTime" 
-                      stroke="var(--primary-color)" 
-                      strokeWidth={2} 
-                      dot={{ r: 4, strokeWidth: 2, fill: "#fff" }} 
-                      activeDot={{ r: 6, strokeWidth: 0 }}
-                      name="Time Tracked" 
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex flex-column align-items-center justify-content-center h-full text-color-secondary p-4">
-                  <i className="pi pi-chart-line text-xl mb-3 opacity-60"></i>
-                  <span>No monthly data available</span>
-                  <span className="text-xs mt-2">Try selecting a different date range</span>
-                </div>
-              )}
-            </div>
           </Card>
         </div>
       </div>

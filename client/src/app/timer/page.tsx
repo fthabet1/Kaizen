@@ -7,7 +7,8 @@ import { useAuth } from '../../contexts/AuthContexts';
 import { useTimer } from '../../contexts/TimerContext';
 import { useRouter, useSearchParams } from 'next/navigation';
 import axios from '../../utils/axiosConfig';
-import { format, subMinutes, subHours } from 'date-fns';
+import { format, subMinutes, subHours, parseISO, startOfWeek, endOfWeek, addDays, startOfMonth, endOfMonth, subMonths, subWeeks, startOfYear, endOfYear, addHours } from 'date-fns';
+import { formatTime } from '../../utils/timeUtils';
 
 // PrimeReact imports
 import { Card } from 'primereact/card';
@@ -87,6 +88,9 @@ export default function TimerPage() {
 
   // Format time from seconds to readable format (HH:MM:SS)
   const formatTimerDisplay = (seconds: number) => {
+    // Ensure we never display negative time
+    seconds = Math.max(0, seconds);
+    
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
@@ -675,7 +679,7 @@ export default function TimerPage() {
                 <div className="timer-display bg-gray-100 dark:bg-gray-800 p-5 border-round mb-4">
                   <div className="text-5xl font-bold mb-3 text-primary">{formatTimerDisplay(elapsedTime)}</div>
                   <div className="text-lg">
-                    Started at: {startTime ? format(new Date(startTime), 'h:mm a, MMMM d, yyyy') : ''}
+                    Started at: {startTime ? format(startTime, 'h:mm a, MMMM d, yyyy') : ''}
                   </div>
                 </div>
                 
@@ -748,7 +752,7 @@ export default function TimerPage() {
             <div className="field mb-4">
               <label htmlFor="currentStartTime" className="font-medium mb-2 block">Current Start Time</label>
               <div className="p-inputtext p-disabled" id="currentStartTime">
-                {startTime ? format(new Date(startTime), 'h:mm a, MMMM d, yyyy') : ''}
+                {startTime ? format(startTime, 'h:mm a, MMMM d, yyyy') : ''}
               </div>
             </div>
             
@@ -833,7 +837,7 @@ export default function TimerPage() {
               <div className="timer-display bg-gray-100 dark:bg-gray-800 p-5 border-round mb-4">
                 <div className="text-5xl font-bold mb-3 text-primary">{formatTimerDisplay(elapsedTime)}</div>
                 <div className="text-lg">
-                  Started at: {startTime ? format(new Date(startTime), 'h:mm a, MMMM d, yyyy') : ''}
+                  Started at: {startTime ? format(startTime, 'h:mm a, MMMM d, yyyy') : ''}
                 </div>
               </div>
                 
