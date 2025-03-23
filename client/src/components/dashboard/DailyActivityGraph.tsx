@@ -29,6 +29,7 @@ import {
   isSameYear
 } from 'date-fns';
 import { formatTime } from '../../utils/timeUtils';
+import { parseISOWithTimezone } from '../../utils/dateUtils';
 
 import { Card } from 'primereact/card';
 import { Dropdown, DropdownChangeEvent } from 'primereact/dropdown';
@@ -551,7 +552,7 @@ export default function DailyActivityGraph() {
         
         // Convert to chart data format
         const days: ChartDataItem[] = Object.keys(dailyData).map(dateKey => {
-          const date = parseISO(dateKey);
+          const date = parseISOWithTimezone(dateKey);
           const totalHours = (dailyData[dateKey].totalTime / 3600).toFixed(1);
           
           return {
@@ -611,7 +612,7 @@ export default function DailyActivityGraph() {
         
         // Convert to chart data format
         const months: ChartDataItem[] = Object.keys(monthlyData).map(monthKey => {
-          const date = parseISO(`${monthKey}-01`); // First day of month
+          const date = parseISOWithTimezone(`${monthKey}-01`); // First day of month
           const totalHours = (monthlyData[monthKey].totalTime / 3600).toFixed(1);
           
           return {
