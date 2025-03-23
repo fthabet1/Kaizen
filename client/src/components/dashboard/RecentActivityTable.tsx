@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation';
 import axios from '../../utils/axiosConfig';
 import { format, parseISO, startOfWeek, endOfWeek } from 'date-fns';
 import { formatTime } from '../../utils/timeUtils';
+import { parseISOWithTimezone } from '../../utils/dateUtils';
 
 // PrimeReact imports
 import { DataTable, DataTableFilterMeta } from 'primereact/datatable';
@@ -23,6 +24,8 @@ import { Card } from 'primereact/card';
 import { ProgressSpinner } from 'primereact/progressspinner';
 import { Toast } from 'primereact/toast';
 import { ConfirmDialog, confirmDialog } from 'primereact/confirmdialog';
+import { Dialog } from 'primereact/dialog';
+import { InputTextarea } from 'primereact/inputtextarea';
 
 interface Project {
   id: number;
@@ -48,6 +51,12 @@ interface DateRange {
   end: Date | null;
 }
 
+interface Task {
+  id: number;
+  name: string;
+  project_id: number;
+}
+
 export default function RecentActivityTable() {
   const { user, token, isReady } = useAuth();
   const { deleteTimeEntry: handleTimerEntryDelete } = useTimer();
@@ -56,8 +65,6 @@ export default function RecentActivityTable() {
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<number | null>(null);
-  const [editingEntry, setEditingEntry] = useState<number | null>(null);
-  const [editingDescription, setEditingDescription] = useState<string>('');
   const [savingDescription, setSavingDescription] = useState(false);
   const [filters, setFilters] = useState<DataTableFilterMeta>({
     global: { value: null, matchMode: 'contains' },
@@ -70,6 +77,16 @@ export default function RecentActivityTable() {
   const [expandedRows, setExpandedRows] = useState<any>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjects, setSelectedProjects] = useState<Project[]>([]);
+  const [editDialogVisible, setEditDialogVisible] = useState(false);
+  const [editingTimeEntry, setEditingTimeEntry] = useState<RecentActivity | null>(null);
+  const [editForm, setEditForm] = useState({
+    task_name: '',
+    project_id: 0,
+    start_time: '',
+    end_time: '',
+    description: ''
+  });
+  const [tasks, setTasks] = useState<Task[]>([]);
 
   // Setup event listener for API connection errors
   useEffect(() => {
@@ -117,9 +134,10 @@ export default function RecentActivityTable() {
         timeout: 5000
       };
       
-      const [activityResponse, projectsResponse] = await Promise.all([
+      const [activityResponse, projectsResponse, tasksResponse] = await Promise.all([
         axios.get('/api/time-entries?limit=50', requestConfig),
-        axios.get('/api/projects', requestConfig)
+        axios.get('/api/projects', requestConfig),
+        axios.get('/api/tasks', requestConfig)
       ]);
       
       if (activityResponse.data && Array.isArray(activityResponse.data)) {
@@ -136,6 +154,14 @@ export default function RecentActivityTable() {
       } else {
         console.warn('Unexpected projects response format', projectsResponse.data);
         setProjects([]);
+      }
+
+      if (tasksResponse.data && Array.isArray(tasksResponse.data)) {
+        console.log(`Loaded ${tasksResponse.data.length} tasks`);
+        setTasks(tasksResponse.data);
+      } else {
+        console.warn('Unexpected tasks response format', tasksResponse.data);
+        setTasks([]);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -160,6 +186,7 @@ export default function RecentActivityTable() {
       // Set empty arrays to prevent UI errors
       setRecentActivity([]);
       setProjects([]);
+      setTasks([]);
     } finally {
       setLoading(false);
     }
@@ -260,15 +287,15 @@ export default function RecentActivityTable() {
   };
 
   const dateBodyTemplate = (rowData: RecentActivity) => {
-    return format(parseISO(rowData.start_time), 'MMM d, yyyy');
+    return format(parseISOWithTimezone(rowData.start_time), 'MMM d, yyyy');
   };
 
   const timeBodyTemplate = (rowData: RecentActivity) => {
     return (
-      <div>
-        <div>{format(parseISO(rowData.start_time), 'h:mm a')}</div>
+      <div className="flex flex-column">
+        <div>{format(parseISOWithTimezone(rowData.start_time), 'h:mm a')}</div>
         <div className="text-color-secondary">
-          {rowData.end_time ? format(parseISO(rowData.end_time), 'h:mm a') : 'In Progress'}
+          {rowData.end_time ? format(parseISOWithTimezone(rowData.end_time), 'h:mm a') : 'In Progress'}
         </div>
       </div>
     );
@@ -305,6 +332,14 @@ export default function RecentActivityTable() {
   const actionsBodyTemplate = (rowData: RecentActivity) => {
     return (
       <div className="flex gap-2 justify-content-center">
+        <Button
+          icon="pi pi-pencil"
+          className="p-button-rounded p-button-primary p-button-text"
+          tooltip="Edit entry"
+          tooltipOptions={{ position: 'top' }}
+          onClick={() => openEditDialog(rowData)}
+          disabled={deleting !== null}
+        />
         <Button
           icon="pi pi-trash"
           className="p-button-rounded p-button-danger p-button-text"
@@ -401,100 +436,7 @@ export default function RecentActivityTable() {
     });
   };
 
-  const updateTimeEntryDescription = async (entryId: number, description: string) => {
-    if (!token) {
-      console.error('No authentication token available for updating');
-      toast.current?.show({
-        severity: 'error',
-        summary: 'Authentication Error',
-        detail: 'Please log in again to update time entries',
-        life: 3000
-      });
-      return;
-    }
-    
-    try {
-      setSavingDescription(true);
-      
-      // Update the time entry on the server
-      await axios.put(`/api/time-entries/${entryId}`, 
-        { description },
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          },
-          timeout: 5000
-        }
-      );
-      
-      // Update local state
-      setRecentActivity(prev => 
-        prev.map(entry => 
-          entry.id === entryId 
-            ? { ...entry, description } 
-            : entry
-        )
-      );
-      
-      // Exit edit mode
-      setEditingEntry(null);
-      setEditingDescription('');
-      
-      // Show success message
-      toast.current?.show({
-        severity: 'success',
-        summary: 'Success',
-        detail: 'Time entry description updated successfully',
-        life: 3000
-      });
-    } catch (error) {
-      console.error('Error updating time entry:', error);
-      
-      // Check if it's a network error
-      if (axios.isAxiosError(error) && !error.response) {
-        toast.current?.show({
-          severity: 'error',
-          summary: 'Connection Error',
-          detail: 'Unable to connect to the server. Please try again later.',
-          life: 5000
-        });
-      } else if (axios.isAxiosError(error) && error.response?.status === 401) {
-        toast.current?.show({
-          severity: 'error',
-          summary: 'Authentication Error',
-          detail: 'Your session has expired. Please log in again.',
-          life: 3000
-        });
-      } else {
-        toast.current?.show({
-          severity: 'error',
-          summary: 'Error',
-          detail: 'Failed to update time entry. Please try again.',
-          life: 3000
-        });
-      }
-    } finally {
-      setSavingDescription(false);
-    }
-  };
-
   const rowExpansionTemplate = (data: RecentActivity) => {
-    const isEditing = editingEntry === data.id;
-    
-    const handleEditClick = () => {
-      setEditingEntry(data.id);
-      setEditingDescription(data.description || '');
-    };
-    
-    const handleCancelEdit = () => {
-      setEditingEntry(null);
-      setEditingDescription('');
-    };
-    
-    const handleSaveDescription = () => {
-      updateTimeEntryDescription(data.id, editingDescription);
-    };
-    
     return (
       <div className="p-3">
         <h5>Details</h5>
@@ -511,13 +453,13 @@ export default function RecentActivityTable() {
               </div>
               <div className="mb-2">
                 <span className="font-semibold mr-2">Start Time:</span>
-                <span>{format(parseISO(data.start_time), 'MMMM d, yyyy h:mm a')}</span>
+                <span>{format(parseISOWithTimezone(data.start_time), 'MMMM d, yyyy h:mm a')}</span>
               </div>
               <div className="mb-2">
                 <span className="font-semibold mr-2">End Time:</span>
                 <span>
                   {data.end_time 
-                    ? format(parseISO(data.end_time), 'MMMM d, yyyy h:mm a')
+                    ? format(parseISOWithTimezone(data.end_time), 'MMMM d, yyyy h:mm a')
                     : 'In Progress'}
                 </span>
               </div>
@@ -530,64 +472,30 @@ export default function RecentActivityTable() {
                 <span>{formatTime(data.duration)}</span>
               </div>
               <div>
-                <div className="flex justify-content-between align-items-center mb-2">
+                <div className="mb-2">
                   <span className="font-semibold">Description:</span>
-                  {!isEditing && (
-                    <Button 
-                      icon="pi pi-pencil" 
-                      className="p-button-rounded p-button-text p-button-sm" 
-                      onClick={handleEditClick}
-                      tooltip="Edit description"
-                      tooltipOptions={{ position: 'top' }}
-                    />
-                  )}
                 </div>
-                
-                {isEditing ? (
-                  <div className="flex flex-column">
-                    <InputText 
-                      value={editingDescription} 
-                      onChange={(e) => setEditingDescription(e.target.value)}
-                      autoFocus
-                      className="mb-2"
-                      placeholder="Enter a description"
-                    />
-                    <div className="flex justify-content-end gap-2 mt-2">
-                      <Button 
-                        label="Cancel" 
-                        icon="pi pi-times" 
-                        className="p-button-outlined p-button-sm"
-                        onClick={handleCancelEdit}
-                        disabled={savingDescription}
-                      />
-                      <Button 
-                        label="Save" 
-                        icon="pi pi-check" 
-                        className="p-button-sm"
-                        onClick={handleSaveDescription}
-                        loading={savingDescription}
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-2 border-1 surface-border border-round">
-                    {data.description || 'No description provided'}
-                  </div>
-                )}
+                <div className="p-2 border-1 surface-border border-round">
+                  {data.description || 'No description provided'}
+                </div>
               </div>
               
-              {!isEditing && (
-                <div className="mt-3 flex justify-content-end">
-                  <Button
-                    label="Delete Entry"
-                    icon="pi pi-trash"
-                    className="p-button-danger p-button-sm"
-                    onClick={() => confirmDelete(data.id, data.task_name)}
-                    loading={deleting === data.id}
-                    disabled={deleting !== null || savingDescription}
-                  />
-                </div>
-              )}
+              <div className="mt-3 flex justify-content-end gap-2">
+                <Button
+                  label="Edit Entry"
+                  icon="pi pi-pencil"
+                  className="p-button-primary p-button-sm"
+                  onClick={() => openEditDialog(data)}
+                />
+                <Button
+                  label="Delete Entry"
+                  icon="pi pi-trash"
+                  className="p-button-danger p-button-sm"
+                  onClick={() => confirmDelete(data.id, data.task_name)}
+                  loading={deleting === data.id}
+                  disabled={deleting !== null || savingDescription}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -615,6 +523,92 @@ export default function RecentActivityTable() {
     );
   };
 
+  const openEditDialog = (entry: RecentActivity) => {
+    setEditingTimeEntry(entry);
+    setEditForm({
+      task_name: entry.task_name,
+      project_id: entry.project_id,
+      start_time: entry.start_time,
+      end_time: entry.end_time || '',
+      description: entry.description || ''
+    });
+    setEditDialogVisible(true);
+  };
+
+  const handleEditFormChange = (field: string, value: any) => {
+    setEditForm(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const saveTimeEntry = async () => {
+    if (!token || !editingTimeEntry) {
+      return;
+    }
+    
+    try {
+      setSavingDescription(true);
+      
+      const updateData = {
+        task_name: editForm.task_name,
+        project_id: editForm.project_id,
+        start_time: editForm.start_time,
+        end_time: editForm.end_time || null,
+        description: editForm.description || null
+      };
+      
+      await axios.put(`/api/time-entries/${editingTimeEntry.id}`, 
+        updateData,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          timeout: 5000
+        }
+      );
+      
+      // Refresh data after update
+      await fetchData();
+      
+      // Close dialog
+      setEditDialogVisible(false);
+      setEditingTimeEntry(null);
+      
+      toast.current?.show({
+        severity: 'success',
+        summary: 'Success',
+        detail: 'Time entry updated successfully',
+        life: 3000
+      });
+    } catch (error) {
+      console.error('Error updating time entry:', error);
+      
+      if (axios.isAxiosError(error) && !error.response) {
+        toast.current?.show({
+          severity: 'error',
+          summary: 'Connection Error',
+          detail: 'Unable to connect to the server. Please try again later.',
+          life: 5000
+        });
+      } else {
+        toast.current?.show({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Failed to update time entry. Please try again.',
+          life: 3000
+        });
+      }
+    } finally {
+      setSavingDescription(false);
+    }
+  };
+
+  // Add a function to filter tasks by project
+  const getTasksByProject = (projectId: number) => {
+    return tasks.filter(task => task.project_id === projectId);
+  };
+
   if (loading) {
     return (
       <div className="flex justify-content-center align-items-center" style={{ height: '300px' }}>
@@ -627,6 +621,127 @@ export default function RecentActivityTable() {
     <Card>
       <Toast ref={toast} />
       <ConfirmDialog />
+      
+      <Dialog 
+        header="Edit Time Entry" 
+        visible={editDialogVisible} 
+        style={{ width: '90%', maxWidth: '550px' }} 
+        modal
+        draggable={false}
+        onHide={() => setEditDialogVisible(false)}
+        footer={
+          <div className="flex justify-content-end gap-2">
+            <Button 
+              label="Cancel" 
+              icon="pi pi-times" 
+              className="p-button-text" 
+              onClick={() => setEditDialogVisible(false)}
+              disabled={savingDescription}
+            />
+            <Button 
+              label="Save" 
+              icon="pi pi-check" 
+              onClick={saveTimeEntry}
+              loading={savingDescription}
+            />
+          </div>
+        }
+      >
+        {editingTimeEntry && (
+          <div className="grid p-fluid">
+            <div className="col-12 field">
+              <label htmlFor="project" className="font-medium">Project</label>
+              <Dropdown
+                id="project"
+                value={editForm.project_id}
+                options={projects}
+                onChange={(e) => {
+                  handleEditFormChange('project_id', e.value);
+                  // Reset task selection when project changes
+                  const selectedTask = tasks.find(t => 
+                    t.name === editingTimeEntry.task_name && 
+                    t.project_id === e.value
+                  );
+                  if (!selectedTask) {
+                    // If no matching task found, clear the task selection
+                    handleEditFormChange('task_name', '');
+                  }
+                }}
+                optionLabel="name"
+                optionValue="id"
+                className="w-full"
+                placeholder="Select a project"
+              />
+            </div>
+            
+            <div className="col-12 field">
+              <label htmlFor="task" className="font-medium">Task</label>
+              <Dropdown
+                id="task"
+                value={editForm.task_name}
+                options={getTasksByProject(editForm.project_id)}
+                onChange={(e) => handleEditFormChange('task_name', e.value)}
+                optionLabel="name"
+                optionValue="name"
+                className="w-full"
+                placeholder="Select a task"
+                filter
+              />
+            </div>
+            
+            <div className="col-12 md:col-6 field">
+              <label htmlFor="start_time" className="font-medium">Start Time</label>
+              <Calendar
+                id="start_time"
+                value={editForm.start_time ? new Date(editForm.start_time) : null}
+                onChange={(e) => {
+                  if (e.value) {
+                    // Convert Date to ISO string
+                    const date = e.value as Date;
+                    handleEditFormChange('start_time', date.toISOString());
+                  } else {
+                    handleEditFormChange('start_time', '');
+                  }
+                }}
+                showTime
+                hourFormat="12"
+                className="w-full"
+              />
+            </div>
+            
+            <div className="col-12 md:col-6 field">
+              <label htmlFor="end_time" className="font-medium">End Time</label>
+              <Calendar
+                id="end_time"
+                value={editForm.end_time ? new Date(editForm.end_time) : null}
+                onChange={(e) => {
+                  if (e.value) {
+                    // Convert Date to ISO string
+                    const date = e.value as Date;
+                    handleEditFormChange('end_time', date.toISOString());
+                  } else {
+                    handleEditFormChange('end_time', '');
+                  }
+                }}
+                showTime
+                hourFormat="12"
+                className="w-full"
+              />
+            </div>
+            
+            <div className="col-12 field">
+              <label htmlFor="description" className="font-medium">Description</label>
+              <InputTextarea
+                id="description"
+                value={editForm.description}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => handleEditFormChange('description', e.target.value)}
+                rows={3}
+                className="w-full"
+              />
+            </div>
+          </div>
+        )}
+      </Dialog>
       
       <DataTable 
         value={recentActivity}

@@ -12,6 +12,7 @@ import { Toast } from 'primereact/toast';
 import { format, subHours, subMinutes } from 'date-fns';
 import axios from '../../utils/axiosConfig';
 import { useRouter } from 'next/navigation';
+import { getLocalTimezoneName } from '../../utils/dateUtils';
 
 const TimerBar = () => {
   const { 
@@ -58,6 +59,7 @@ const TimerBar = () => {
   // Set up timer adjustment when timer is running
   useEffect(() => {
     if (isRunning && startTime) {
+      // Create a copy of the startTime for adjustment in the dialog
       setAdjustedStartTime(new Date(startTime));
     }
   }, [isRunning, startTime]);
@@ -68,6 +70,9 @@ const TimerBar = () => {
 
   // Format elapsed time
   function formatTime(seconds: number) {
+    // Ensure we never have negative seconds
+    seconds = Math.max(0, seconds);
+    
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
@@ -128,6 +133,7 @@ const TimerBar = () => {
 
   const openAdjustStartTimeDialog = () => {
     if (startTime) {
+      // Create a copy of the startTime for adjustment in the dialog
       setAdjustedStartTime(new Date(startTime));
       setHoursToSubtract(0);
       setMinutesToSubtract(0);
@@ -177,6 +183,10 @@ const TimerBar = () => {
     }
     
     try {
+      console.log('Saving start time adjustment:');
+      console.log('- New start time (local):', adjustedStartTime.toString());
+      console.log('- New start time as ISO:', adjustedStartTime.toISOString());
+      
       await adjustStartTime(adjustedStartTime);
       
       toast.current?.show({
@@ -208,15 +218,38 @@ const TimerBar = () => {
   return (
     <>
       <Toast ref={toast} position="bottom-right" />
-      <div className="fixed bottom-0 left-0 right-0 bg-surface-card shadow-8 p-3 z-5">
-        <div className="flex flex-column md:flex-row align-items-center justify-content-between gap-2">
+      <div 
+        className="fixed bottom-0 left-0 right-0 bg-black shadow-8 p-4 z-5"
+        style={{ 
+          backgroundColor: 'rgb(0, 0, 0)',
+          opacity: 1,
+          zIndex: 1000,
+          borderTop: '1px solid #333'
+        }}
+      >
+        {/* Debug output - remove from production */}
+        <div className="text-xs text-color-secondary mb-2" style={{ display: 'none' }}>
+          {startTime && (
+            <>
+              <div>Debug - ISO: {startTime.toISOString()}</div>
+              <div>Debug - Local: {startTime.toString()}</div>
+              <div>Debug - format date: {startTime ? format(startTime, 'h:mm a, MMMM d, yyyy') : ''}</div>
+              <div>Debug - raw h:mm: {startTime.getHours()}:{startTime.getMinutes()}</div>
+              <div>Debug - Current time: {new Date().toString()}</div>
+              <div>Debug - Browser timezone: {getLocalTimezoneName()}</div>
+              <div>Debug - Hours behind UTC: {new Date().getTimezoneOffset() / 60}</div>
+            </>
+          )}
+        </div>
+        
+        <div className="flex flex-column md:flex-row align-items-center justify-content-between gap-2 text-white">
           <div className="flex align-items-center gap-2 cursor-pointer" onClick={navigateToTimerPage}>
             <div className="w-1rem h-1rem border-circle bg-red-500 flex-shrink-0 animate-pulse"></div>
             
             <div className="flex flex-column">
               <div className="font-medium">{currentTask?.name}</div>
               
-              <div className="flex align-items-center text-sm text-color-secondary">
+              <div className="flex align-items-center text-sm text-gray-300">
                 <span>in</span>
                 <div 
                   className="inline-flex align-items-center mx-2 px-2 py-1 border-round" 
@@ -247,7 +280,7 @@ const TimerBar = () => {
               </div>
             ) : (
               <div 
-                className="text-color-secondary cursor-pointer hover:text-color-primary transition-colors transition-duration-200 text-center md:text-left"
+                className="text-gray-300 cursor-pointer hover:text-white transition-colors transition-duration-200 text-center md:text-left"
                 onClick={() => {
                   setTempDescription(description);
                   setIsDescriptionEditing(true);
@@ -259,12 +292,12 @@ const TimerBar = () => {
           </div>
           
           <div className="flex align-items-center gap-3">
-            <div className="font-medium font-mono text-xl">{displayedTime}</div>
+            <div className="font-medium font-mono text-xl text-white">{displayedTime}</div>
             
             <div className="flex gap-2">
               <Button
                 icon="pi pi-clock"
-                className="p-button-rounded p-button-text"
+                className="p-button-rounded p-button-text p-button-plain"
                 onClick={openAdjustStartTimeDialog}
                 tooltip="Adjust start time"
               />
@@ -278,7 +311,7 @@ const TimerBar = () => {
               
               <Button
                 icon="pi pi-times"
-                className="p-button-rounded p-button-text p-button-secondary"
+                className="p-button-rounded p-button-text p-button-plain"
                 onClick={handleDiscardTimer}
                 tooltip="Discard timer"
               />
@@ -304,8 +337,9 @@ const TimerBar = () => {
           <div className="field mb-4">
             <label htmlFor="currentStartTime" className="font-medium mb-2 block">Current Start Time</label>
             <div className="p-inputtext p-disabled" id="currentStartTime">
-              {startTime ? format(new Date(startTime), 'h:mm a, MMMM d, yyyy') : ''}
+              {startTime ? format(startTime, 'h:mm a, MMMM d, yyyy') : ''}
             </div>
+            <small className="text-color-secondary block mt-1">Time shown in your local timezone ({getLocalTimezoneName()})</small>
           </div>
           
           <div className="field mb-4">
