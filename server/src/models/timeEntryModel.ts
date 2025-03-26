@@ -216,16 +216,16 @@ class TimeEntryModel {
       // If end_time is provided but no duration, calculate it
       if (data.duration === undefined) {
         const entry = await this.findById(id);
+    
+        // Use new start_time if provided, otherwise use existing one
+        const startTime = data.start_time ? new Date(data.start_time) : 
+                          (entry && entry.start_time ? new Date(entry.start_time) : new Date());
+        const endTime = new Date(data.end_time);
+        const duration = Math.floor((endTime.getTime() - startTime.getTime()) / 1000);
         
-        if (entry && entry.start_time) {
-          const startTime = new Date(entry.start_time);
-          const endTime = new Date(data.end_time);
-          const duration = Math.floor((endTime.getTime() - startTime.getTime()) / 1000);
-          
-          updates.push(`duration = $${paramIndex}`);
-          values.push(duration);
-          paramIndex++;
-        }
+        updates.push(`duration = $${paramIndex}`);
+        values.push(duration);
+        paramIndex++;
       }
     }
 

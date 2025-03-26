@@ -80,13 +80,12 @@ export default function RecentActivityTable() {
   const [editDialogVisible, setEditDialogVisible] = useState(false);
   const [editingTimeEntry, setEditingTimeEntry] = useState<RecentActivity | null>(null);
   const [editForm, setEditForm] = useState({
-    task_name: '',
-    project_id: 0,
     start_time: '',
     end_time: '',
     description: ''
   });
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [dateValidationError, setDateValidationError] = useState<string | null>(null);
 
   // Setup event listener for API connection errors
   useEffect(() => {
@@ -526,20 +525,30 @@ export default function RecentActivityTable() {
   const openEditDialog = (entry: RecentActivity) => {
     setEditingTimeEntry(entry);
     setEditForm({
-      task_name: entry.task_name,
-      project_id: entry.project_id,
-      start_time: entry.start_time,
-      end_time: entry.end_time || '',
+      start_time: parseISOWithTimezone(entry.start_time).toISOString(),
+      end_time: entry.end_time ? parseISOWithTimezone(entry.end_time).toISOString() : '',
       description: entry.description || ''
     });
+    setDateValidationError(null);
     setEditDialogVisible(true);
   };
 
   const handleEditFormChange = (field: string, value: any) => {
-    setEditForm(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    const updatedForm = { ...editForm, [field]: value };
+    setEditForm(updatedForm);
+    
+    // Validate date fields if both are set
+    if ((field === 'start_time' || field === 'end_time') && 
+        updatedForm.start_time && updatedForm.end_time) {
+      const startTime = new Date(updatedForm.start_time);
+      const endTime = new Date(updatedForm.end_time);
+      
+      if (startTime > endTime) {
+        setDateValidationError('Start time cannot be after end time');
+      } else {
+        setDateValidationError(null);
+      }
+    }
   };
 
   const saveTimeEntry = async () => {
@@ -547,12 +556,21 @@ export default function RecentActivityTable() {
       return;
     }
     
-    try {
-      setSavingDescription(true);
+    // Final check for start/end time validity
+    if (editForm.start_time && editForm.end_time) {
+      const startTime = new Date(editForm.start_time);
+      const endTime = new Date(editForm.end_time);
       
+      if (startTime > endTime) {
+        setDateValidationError('Start time cannot be after end time');
+        return;
+      }
+    }
+    
+    setSavingDescription(true);
+    
+    try {
       const updateData = {
-        task_name: editForm.task_name,
-        project_id: editForm.project_id,
         start_time: editForm.start_time,
         end_time: editForm.end_time || null,
         description: editForm.description || null
@@ -623,14 +641,14 @@ export default function RecentActivityTable() {
       <ConfirmDialog />
       
       <Dialog 
-        header="Edit Time Entry" 
+        header={editingTimeEntry ? `Edit - ${editingTimeEntry.project_name} / ${editingTimeEntry.task_name}` : "Edit Time Entry"} 
         visible={editDialogVisible} 
         style={{ width: '90%', maxWidth: '550px' }} 
         modal
         draggable={false}
         onHide={() => setEditDialogVisible(false)}
         footer={
-          <div className="flex justify-content-end gap-2">
+          <div className="mt-4 flex justify-content-end">
             <Button 
               label="Cancel" 
               icon="pi pi-times" 
@@ -641,52 +659,27 @@ export default function RecentActivityTable() {
             <Button 
               label="Save" 
               icon="pi pi-check" 
-              onClick={saveTimeEntry}
+              className="p-button-text" 
+              onClick={saveTimeEntry} 
               loading={savingDescription}
+              disabled={dateValidationError !== null || savingDescription}
             />
           </div>
         }
       >
         {editingTimeEntry && (
           <div className="grid p-fluid">
-            <div className="col-12 field">
-              <label htmlFor="project" className="font-medium">Project</label>
-              <Dropdown
-                id="project"
-                value={editForm.project_id}
-                options={projects}
-                onChange={(e) => {
-                  handleEditFormChange('project_id', e.value);
-                  // Reset task selection when project changes
-                  const selectedTask = tasks.find(t => 
-                    t.name === editingTimeEntry.task_name && 
-                    t.project_id === e.value
-                  );
-                  if (!selectedTask) {
-                    // If no matching task found, clear the task selection
-                    handleEditFormChange('task_name', '');
-                  }
-                }}
-                optionLabel="name"
-                optionValue="id"
-                className="w-full"
-                placeholder="Select a project"
-              />
-            </div>
-            
-            <div className="col-12 field">
-              <label htmlFor="task" className="font-medium">Task</label>
-              <Dropdown
-                id="task"
-                value={editForm.task_name}
-                options={getTasksByProject(editForm.project_id)}
-                onChange={(e) => handleEditFormChange('task_name', e.value)}
-                optionLabel="name"
-                optionValue="name"
-                className="w-full"
-                placeholder="Select a task"
-                filter
-              />
+            <div className="col-12 mb-2">
+              <div className="flex flex-column">
+                <div className="mb-1">
+                  <span className="font-semibold mr-2">Project:</span>
+                  <span>{editingTimeEntry.project_name}</span>
+                </div>
+                <div>
+                  <span className="font-semibold mr-2">Task:</span>
+                  <span>{editingTimeEntry.task_name}</span>
+                </div>
+              </div>
             </div>
             
             <div className="col-12 md:col-6 field">
@@ -716,9 +709,9 @@ export default function RecentActivityTable() {
                 value={editForm.end_time ? new Date(editForm.end_time) : null}
                 onChange={(e) => {
                   if (e.value) {
-                    // Convert Date to ISO string
+                    // Store the local Date object directly without conversion
                     const date = e.value as Date;
-                    handleEditFormChange('end_time', date.toISOString());
+                    handleEditFormChange('end_time', date);
                   } else {
                     handleEditFormChange('end_time', '');
                   }
@@ -728,6 +721,12 @@ export default function RecentActivityTable() {
                 className="w-full"
               />
             </div>
+            
+            {dateValidationError && (
+              <div className="col-12">
+                <small className="p-error">{dateValidationError}</small>
+              </div>
+            )}
             
             <div className="col-12 field">
               <label htmlFor="description" className="font-medium">Description</label>

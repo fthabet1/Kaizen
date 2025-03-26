@@ -91,6 +91,7 @@ export default function ReportsPage() {
     { label: 'Today', value: 'today' },
     { label: 'Yesterday', value: 'yesterday' },
     { label: 'This Week', value: 'week' },
+    { label: 'Past 7 Days', value: 'past_7_days' },
     { label: 'This Month', value: 'month' },
     { label: 'Last Week', value: 'last_week' },
     { label: 'Last Month', value: 'last_month' },
@@ -189,6 +190,13 @@ export default function ReportsPage() {
           startDate.setDate(startDate.getDate() - 1);
           startDate.setHours(0, 0, 0, 0);
           endDate = new Date(startDate);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'past_7_days':
+          startDate = new Date();
+          startDate.setDate(startDate.getDate() - 6); 
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date();
           endDate.setHours(23, 59, 59, 999);
           break;
         case 'week':
@@ -484,11 +492,6 @@ export default function ReportsPage() {
           )}
         </div>
       </div>
-
-      <Card className="mb-4">
-        <div className="text-color-secondary mb-1">Report for</div>
-        <div className="text-xl font-medium">{getDateRangeText()}</div>
-      </Card>
 
       {/* Overview Stats */}
       <div className="grid mb-4">
