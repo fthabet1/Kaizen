@@ -1,6 +1,7 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { 
     getAuth, 
@@ -9,7 +10,8 @@ import {
     createUserWithEmailAndPassword, 
     signOut,
     User,
-    updateProfile
+    updateProfile,
+    updatePassword as firebaseUpdatePassword
 } from 'firebase/auth';
 import axios from '../utils/axiosConfig';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
@@ -32,12 +34,13 @@ interface AuthContextType {
     loading: boolean;
     authError: string | null;
     token: string | null;
-    isReady: boolean; // Add this line
+    isReady: boolean;
     signInWithEmail: (email: string, password: string) => Promise<void>;
     signUpWithEmail: (email: string, password: string, name: string) => Promise<void>;
     signInWithGoogle: () => Promise<void>;  
     logout: () => Promise<void>;
-  }
+    updatePassword: (newPassword: string) => Promise<void>;
+}
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -48,47 +51,93 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [token, setToken] = useState<string | null>(null);
     const [isReady, setIsReady] = useState(false);
     
+    const tokenRef = useRef<string | null>(null);
+
     // Set up axios interceptor to include the token
     useEffect(() => {
-        if (token) {
-            axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-        } else {
-            delete axios.defaults.headers.common['Authorization'];
+        const interceptor = axios.interceptors.request.use(config => {
+            const currentToken = tokenRef.current;
+            if (currentToken) {
+                config.headers.Authorization = `Bearer ${currentToken}`;
+            } else {
+                delete config.headers.Authorization;
+            }
+            return config;
+        });
+
+        return () => {
+            axios.interceptors.request.eject(interceptor);
         }
+
+    }, []);
+
+    useEffect(() => {
+        tokenRef.current = token;
     }, [token]);
+
+    const [tokenExpiry, setTokenExpiry] = useState<number | null>(null);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(firebaseAuth, async (firebaseUser) => {
           try {
             if (firebaseUser) {
               setUser(firebaseUser);
-              const idToken = await firebaseUser.getIdToken();
-              setToken(idToken);
-              
-              // Register or update user in our backend
-              try {
-                await registerUserInBackend(firebaseUser, idToken);
-              } catch (error) {
-                console.error('Error registering user in backend', error);
+
+              const shouldRefreshToken = !token || 
+                (tokenExpiry && Date.now() >= tokenExpiry - 5 * 60 * 1000); // Refresh token 5 minutes before expiry
+
+
+              if (shouldRefreshToken) {
+                firebaseUser.getIdToken().then(idToken => {
+                    setToken(idToken);
+                    setTokenExpiry(Date.now() + 3600 * 1000); // 1 hour
+                }).catch(error => {
+                    console.error('Error refreshing token:', error);
+                });
+
               }
+              
+              setLoading(false);
+              setIsReady(true); // Set ready state when auth is done
+              
+              if(shouldRefreshToken) {
+                firebaseUser.getIdToken().then(idToken => {
+                    registerUserInBackend(firebaseUser, idToken).catch(error => {
+                        console.error('Error registering user in backend:', error);
+                    });
+                }).catch(error => {
+                    console.error('Error getting token:', error);
+                });
+              }
+              
             } else {
-              // User is not authenticated
-              setUser(null);
-              setToken(null);
+                setUser(null);
+                setToken(null);
+                setTokenExpiry(null);
+                setLoading(false);
+                setIsReady(true);
             }
           } catch (error) {
             console.error('Auth state change error:', error);
-          } finally {
+            setAuthError((error as Error).message);
             setLoading(false);
-            setIsReady(true); // Set ready state when auth is done
+            setIsReady(true);
           }
         });
     
         return () => unsubscribe();
-      }, []);
+      }, [token, tokenExpiry]);
 
-    // Helper function to register user in backend
+
+    
+    const [isUserRegistered, setIsUserRegistered] = useState(false);
+    
     const registerUserInBackend = async (firebaseUser: User, idToken: string) => {
+
+        if (isUserRegistered) {
+            return;
+        }
+        
         try {
             // Set the token in axios headers for this request
             const headers = {
@@ -104,6 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }, { headers });
             
             console.log('User registered/updated in backend successfully');
+            setIsUserRegistered(true);
         } catch (error) {
             console.error('Failed to register user in backend:', error);
             throw error;
@@ -119,6 +169,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // Note: User registration in backend will be handled by the auth state change listener
         } catch (error: unknown) {
             setAuthError((error as Error).message);
+            setLoading(false);
             throw error;
         } finally {
             setLoading(false);
@@ -181,17 +232,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     };
 
-    const value = {
+    // Update user's password
+    const updatePassword = async (newPassword: string) => {
+        try {
+            setAuthError(null);
+            setLoading(true);
+            
+            if (!user) {
+                throw new Error('No user is currently signed in');
+            }
+
+            await firebaseUpdatePassword(user, newPassword);
+        } catch (error: unknown) {
+            setAuthError((error as Error).message);
+            throw error;
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const value = useMemo(() => ({
         user,
         loading,
         authError,
         token,
-        isReady, // Add this line
+        isReady,
         signInWithEmail,
         signUpWithEmail,
         signInWithGoogle,
-        logout
-      };
+        logout,
+        updatePassword
+    }), [user, loading, authError, token, isReady]);
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

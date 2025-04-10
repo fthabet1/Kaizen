@@ -5,6 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContexts';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
+import PasswordUpdate from '../../components/PasswordUpdate';
 
 // PrimeReact Components
 import { Card } from 'primereact/card';
@@ -121,21 +122,49 @@ export default function SettingsPage() {
   );
 
   // Account settings tab
-  const AccountSettings = () => (
-    <div>
-      <p className="mb-4 line-height-3">
-        Your account is managed through your authentication provider.
-        To change your password or delete your account, please visit your provider&apos;s website.
-      </p>
-      
-      <Button 
-        label="Sign Out" 
-        icon="pi pi-sign-out" 
-        className="p-button-outlined" 
-        onClick={() => logout()}
-      />
-    </div>
-  );
+  const AccountSettings = () => {
+    const [showPasswordUpdate, setShowPasswordUpdate] = useState(false);
+
+    return (
+      <div>
+        {!showPasswordUpdate ? (
+          <>
+            <p className="mb-4 line-height-3">
+              Your account is managed through your authentication provider.
+              You can update your password or sign out below.
+            </p>
+            
+            <div className="flex flex-column gap-3">
+              <Button 
+                label="Update Password" 
+                icon="pi pi-key" 
+                className="p-button-outlined" 
+                onClick={() => setShowPasswordUpdate(true)}
+              />
+              
+              <Button 
+                label="Sign Out" 
+                icon="pi pi-sign-out" 
+                className="p-button-outlined" 
+                onClick={() => logout()}
+              />
+            </div>
+          </>
+        ) : (
+          <div>
+            <h3 className="text-xl font-medium mb-4">Update Password</h3>
+            <PasswordUpdate 
+              onSuccess={() => {
+                setShowPasswordUpdate(false);
+              }}
+              onCancel={() => setShowPasswordUpdate(false)}
+              showCancelButton={true}
+            />
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // For mobile view, use tabview 
   const mobileView = () => {
