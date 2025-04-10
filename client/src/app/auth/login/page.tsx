@@ -12,11 +12,14 @@ import { Password } from 'primereact/password';
 import { Button } from 'primereact/button';
 import { Message } from 'primereact/message';
 import { Divider } from 'primereact/divider';
+import { Dialog } from 'primereact/dialog';
+import PasswordUpdate from '../../../components/PasswordUpdate';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [showPasswordUpdate, setShowPasswordUpdate] = useState(false);
   const { user, loading, signInWithEmail, signInWithGoogle, authError } = useAuth();
   const router = useRouter();
 
@@ -102,7 +105,7 @@ export default function Login() {
             </div>
 
             <div className="mb-4 w-full flex justify-content-center">
-              <div className="w-10 md:w-6">
+              <div className="w-10 md:w-8">
               <Password 
                 id="password" 
                 className="w-full"
@@ -119,7 +122,14 @@ export default function Login() {
             </div>
             
             <div className="flex justify-content-center mb-4 w-10 md:w-8">
-              <Link href="#" className="font-medium no-underline text-blue-500 cursor-pointer ml-auto">
+              <Link 
+                href="#" 
+                className="font-medium no-underline text-blue-500 cursor-pointer ml-auto"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setShowPasswordUpdate(true);
+                }}
+              >
                 Forgot password?
               </Link>
             </div>
@@ -150,6 +160,22 @@ export default function Login() {
           </div>
         </Card>
       </div>
+
+      <Dialog 
+        visible={showPasswordUpdate} 
+        onHide={() => setShowPasswordUpdate(false)}
+        header="Update Password"
+        className="p-fluid"
+        style={{ width: '90%', maxWidth: '500px' }}
+      >
+        <PasswordUpdate 
+          onSuccess={() => {
+            setShowPasswordUpdate(false);
+          }}
+          onCancel={() => setShowPasswordUpdate(false)}
+          showCancelButton={true}
+        />
+      </Dialog>
     </div>
   );
 }
