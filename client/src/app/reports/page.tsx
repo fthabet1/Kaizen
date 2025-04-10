@@ -260,6 +260,16 @@ export default function ReportsPage() {
       console.log('API response stats:', statsResponse.data);
       
       const processedStats = prepareStatsData(statsResponse.data);
+      
+      // Debug the daily stats data
+      if (processedStats && processedStats.dailyStats) {
+        console.log('Daily stats count:', processedStats.dailyStats.length);
+        console.log('Total tracked time:', processedStats.totalTrackedTime);
+        if (processedStats.dailyStats.length > 0) {
+          console.log('Daily average:', processedStats.totalTrackedTime / processedStats.dailyStats.length);
+        }
+      }
+      
       setStats(processedStats);
       
       // Process time entries to ensure valid data
@@ -515,7 +525,11 @@ export default function ReportsPage() {
                   )
                 : '0h 0m'}
             </div>
-            <div className="text-sm text-color-secondary mt-1">Per day</div>
+            <div className="text-sm text-color-secondary mt-1">
+              {stats && stats.dailyStats && stats.dailyStats.length > 0
+                ? `Per active day (${stats.dailyStats.length} days with entries)`
+                : 'Per active day'}
+            </div>
           </Card>
         </div>
         

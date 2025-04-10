@@ -58,6 +58,12 @@ export default function Dashboard() {
   const [stats, setStats] = useState<UserStats | null>(null);
   const [loadingStats, setLoadingStats] = useState(true);
 
+  // Debug useEffect
+  useEffect(() => {
+    console.log('Stats updated:', stats);
+    console.log('Project Stats:', stats?.projectStats);
+  }, [stats]);
+
   // Redirect if not logged in
   useEffect(() => {
     if (isReady && !user) {
@@ -68,6 +74,9 @@ export default function Dashboard() {
   useEffect(() => {
     if (user && isReady) {
       fetchStats();
+      console.log('Stats fetched successfully:', stats);
+      console.log('Project Stats:', stats?.projectStats);
+
     }
   }, [user, isReady]);
 
@@ -141,7 +150,8 @@ export default function Dashboard() {
       });
       
       if (response.data) {
-        console.log('Stats fetched successfully');
+        console.log('Stats fetched successfully:', response.data);
+        console.log('Project Stats:', response.data.projectStats);
         setStats(response.data);
       } else {
         console.error('Stats API returned empty response');

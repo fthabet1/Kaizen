@@ -13,8 +13,20 @@ export const getUserStats = async (req: Request, res: Response) => {
     }
     
     // Get start and end dates from query params if provided
-    const startDate = req.query.start_date ? new Date(req.query.start_date as string) : undefined;
-    const endDate = req.query.end_date ? new Date(req.query.end_date as string) : undefined;
+    // Default to this week Monday to Sunday if no dates provided
+    const today = new Date();
+    const startOfWeek = new Date(today.setDate(today.getDate() - today.getDay() + 1)); // Monday
+    const endOfWeek = new Date(today.setDate(today.getDate() - today.getDay() + 7)); // Sunday
+    
+    // For "all time" stats, use a very early date if no start date is provided
+    // This ensures we get the true total time tracked across all time
+    const startDate = req.query.start_date 
+      ? new Date(req.query.start_date as string) 
+      : new Date(2000, 0, 1); // January 1, 2000 as a reasonable early date
+    
+    const endDate = req.query.end_date 
+      ? new Date(req.query.end_date as string) 
+      : new Date(); // Today
     
     // Get user's internal ID
     const userIdResult = await TimeEntryModel.getUserIdByAuthId(userId);
@@ -229,6 +241,7 @@ export const getProjectDistribution = async (req: Request, res: Response) => {
 
 // Import the database client for raw queries
 import db from '../config/db';
+import { start } from 'repl';
 
 export const getDailyPatterns = async (req: Request, res: Response) => {
   try {

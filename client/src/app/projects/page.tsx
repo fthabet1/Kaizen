@@ -5,7 +5,6 @@ import { useAuth } from '../../contexts/AuthContexts';
 import { useRouter } from 'next/navigation';
 // IMPORTANT: Use the configured axios instance instead of the default one
 import axios from '../../utils/axiosConfig';
-import Link from 'next/link';
 
 // PrimeReact Components
 import { DataTable } from 'primereact/datatable';
@@ -314,9 +313,7 @@ export default function ProjectsPage() {
         ></div>
         <div>
           <div className="font-medium">{rowData.name}</div>
-          <Link href={`/projects/${rowData.id}`} className="text-xs text-blue-500 hover:text-blue-700 cursor-pointer">
-            View Details
-          </Link>
+          
         </div>
       </div>
     );

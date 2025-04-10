@@ -56,9 +56,6 @@ export const parseISOWithTimezone = (isoString: string): Date => {
         }
     }
 
-    console.log('Parsed date from dateUtils.ts:', date.toString());
-    console.log('Time difference in minutes:', timeDiff);
-    
     // Check if it's a valid date
     if (isNaN(date.getTime())) {
       throw new Error('Invalid date format');
